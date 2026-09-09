@@ -7,8 +7,21 @@ import type { BackendKind, EngineResult, InferenceRequest, ModelProfile } from '
 
 type Availability = 'checking' | 'ready' | 'unavailable' | 'running'
 type EngineStatus = 'idle' | 'running' | 'success' | 'error' | 'cancelled'
+type Theme = 'light' | 'dark'
 
 const initialBackendStatuses: Record<BackendKind, EngineStatus> = { buddy: 'idle', llama: 'idle' }
+const themeStorageKey = 'performance-lab-theme'
+
+function getInitialTheme(): Theme {
+  if (typeof window === 'undefined') return 'light'
+  try {
+    const savedTheme = window.localStorage.getItem(themeStorageKey)
+    if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme
+  } catch {
+    // Local storage can be unavailable in privacy-restricted browsers.
+  }
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
 
 function statusLabel(status: string): string {
   const labels: Record<string, string> = { checking: '检查中', ready: '就绪', unavailable: '不可用', running: '运行中', idle: '待运行', success: '已完成', completed: '已完成', failed: '失败', error: '失败', cancelled: '已取消' }
@@ -80,6 +93,7 @@ function ProfileSelect({ profiles, value, onChange, disabled }: { profiles: Mode
 
 function App() {
   const defaultProfile = modelProfiles.find((profile) => profile.id === defaultProfileId) ?? modelProfiles[0]
+  const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [selectedProfileId, setSelectedProfileId] = useState(defaultProfile?.id ?? '')
   const selectedProfile = useMemo(() => modelProfiles.find((profile) => profile.id === selectedProfileId) ?? defaultProfile, [defaultProfile, selectedProfileId])
   const [prompt, setPrompt] = useState('Explain how MLIR can improve local LLM inference in three concise points.')
@@ -115,6 +129,17 @@ function App() {
     const timer = globalThis.setTimeout(() => { void refreshStatus() }, 0)
     return () => globalThis.clearTimeout(timer)
   }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.documentElement.style.colorScheme = theme
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#11171d' : '#f5f7f8')
+    try {
+      window.localStorage.setItem(themeStorageKey, theme)
+    } catch {
+      // The selected theme still applies for the current page session.
+    }
+  }, [theme])
 
   const modelReady = (modelId: string) => modelsLoaded && models.has(modelId)
   const profileReady = selectedProfile ? modelReady(selectedProfile.buddyModelId) && modelReady(selectedProfile.llamaModelId) : false
@@ -165,15 +190,15 @@ function App() {
   const speedup = safeSpeedup(buddyTps, llamaTps)
   const hasResults = results.buddy !== null || results.llama !== null
   const summaryText = speedup === null ? '完成两侧推理后，这里会显示速度倍率。' : speedup >= 1 ? `Buddy-MLIR 快 ${formatNumber(speedup, 2)}x` : `llama.cpp 快 ${formatNumber(1 / speedup, 2)}x`
+  const nextThemeLabel = theme === 'light' ? '切换到黑夜模式' : '切换到白天模式'
 
   return (
     <div className="app-shell">
-      <header className="topbar"><a className="wordmark" href="/" aria-label="Performance Lab home"><span className="wordmark-mark">⌁</span><span>PERFORMANCE LAB</span></a><div className="topbar-meta"><span className="api-url"><span className="meta-label">API</span> {apiBaseUrl}</span><span className="topbar-divider" aria-hidden="true" /><span className="live-dot" /> LOCAL / SINGLE REQUEST</div></header>
+      <header className="topbar"><a className="wordmark" href="/" aria-label="Performance Lab home"><span className="wordmark-mark">⌁</span><span>PERFORMANCE LAB</span></a><div className="topbar-actions"><div className="topbar-meta"><span className="api-url"><span className="meta-label">API</span> {apiBaseUrl}</span><span className="topbar-divider" aria-hidden="true" /><span className="live-dot" /> LOCAL / SINGLE REQUEST</div><button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={nextThemeLabel} aria-pressed={theme === 'dark'} title={nextThemeLabel}><span className="theme-track" aria-hidden="true"><span className="theme-thumb">{theme === 'light' ? '☀' : '☾'}</span></span><span className="theme-label">{theme === 'light' ? '白天' : '黑夜'}</span></button></div></header>
       <main>
-        <section className="intro-section"><div><p className="eyebrow">OPEN RUNTIME BENCHMARK / 001</p><p className="intro-copy">在相同模型和采样参数下，观察 buddy-mlir 与 llama.cpp 的真实推理输出与速度。</p></div><div className="intro-note"><span className="note-line" /><p>基准模式</p><strong>顺序执行</strong><small>先 Buddy-MLIR，再 llama.cpp</small></div></section>
         <section className="status-strip" aria-label="服务状态"><div className="status-strip-heading"><span className="section-index">01</span><span>RUNTIME STATUS</span></div><div className="status-items"><div className="runtime-status"><span className="runtime-label">BUDDY-MLIR</span><span className={statusClass(availability('buddy'))}>{statusLabel(availability('buddy'))}</span></div><div className="runtime-status"><span className="runtime-label">LLAMA.CPP</span><span className={statusClass(availability('llama'))}>{statusLabel(availability('llama'))}</span></div><button className="text-button" type="button" onClick={() => void refreshStatus()} disabled={healthStatus === 'checking'}><span className="refresh-icon" aria-hidden="true">↻</span> 刷新状态</button></div></section>
         {(healthError || modelsError) && <div className="notice-banner" role="alert"><span className="notice-mark">!</span><span>{healthError || modelsError}</span><button type="button" className="notice-action" onClick={() => void refreshStatus()}>重试</button></div>}
-        <section className="benchmark-layout"><aside className="control-panel"><div className="panel-heading"><div><span className="section-index">02</span><span className="panel-label">TEST CONFIGURATION</span></div><span className="config-tag">TEXT / 01</span></div><div className="fields"><ProfileSelect profiles={modelProfiles} value={selectedProfileId} onChange={setSelectedProfileId} disabled={runState === 'running'} /><div className="profile-ids"><span>{selectedProfile?.buddyModelId ?? '未配置'}</span><span>{selectedProfile?.llamaModelId ?? '未配置'}</span></div><label className="field"><span>Prompt</span><textarea id="prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={runState === 'running'} rows={7} placeholder="输入一段要比较的文本…" /><small>{prompt.length.toLocaleString()} / 32,768 chars</small></label><div className="field-row"><label className="field"><span>Max tokens</span><input id="max-tokens" type="number" min={1} max={4096} value={maxOutputTokens} onChange={(event) => setMaxOutputTokens(Math.max(1, Number(event.target.value) || 1))} disabled={runState === 'running'} /></label><label className="field"><span>Temperature</span><input id="temperature" type="number" min={0} max={2} step={0.1} value={temperature} onChange={(event) => setTemperature(Math.min(2, Math.max(0, Number(event.target.value) || 0)))} disabled={runState === 'running'} /></label></div><label className="field"><span>Seed</span><input id="seed" type="number" value={seed} onChange={(event) => setSeed(Number(event.target.value) || 0)} disabled={runState === 'running'} /></label></div>{formError && <p className="form-error" role="alert">{formError}</p>}<button className="run-button" type="button" onClick={() => void runComparison()} disabled={runState === 'running' || !profileReady}><span>{runState === 'running' ? '正在运行…' : '运行对比'}</span><span className="button-arrow" aria-hidden="true">↗</span></button>{runState === 'running' && <button className="cancel-button" type="button" onClick={cancelComparison}>取消本次运行</button>}{!profileReady && modelsLoaded && <p className="availability-hint">当前 profile 需要在 ruyi-serving 中同时注册两个后端模型。</p>}</aside>
+        <section className="benchmark-layout"><aside className="control-panel"><div className="panel-heading"><div><span className="section-index">02</span><span className="panel-label">TEST CONFIGURATION</span></div><span className="config-tag">TEXT / 01</span></div><div className="fields"><ProfileSelect profiles={modelProfiles} value={selectedProfileId} onChange={setSelectedProfileId} disabled={runState === 'running'} /><div className="profile-ids"><span>{selectedProfile?.buddyModelId ?? '未配置'}</span><span>{selectedProfile?.llamaModelId ?? '未配置'}</span></div><label className="field prompt-field"><span>Prompt</span><textarea id="prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={runState === 'running'} rows={4} placeholder="输入一段要比较的文本…" /><small>{prompt.length.toLocaleString()} / 32,768 chars</small></label><div className="parameter-grid"><label className="field"><span>Max tokens</span><input id="max-tokens" type="number" min={1} max={4096} value={maxOutputTokens} onChange={(event) => setMaxOutputTokens(Math.max(1, Number(event.target.value) || 1))} disabled={runState === 'running'} /></label><label className="field"><span>Temperature</span><input id="temperature" type="number" min={0} max={2} step={0.1} value={temperature} onChange={(event) => setTemperature(Math.min(2, Math.max(0, Number(event.target.value) || 0)))} disabled={runState === 'running'} /></label><label className="field"><span>Seed</span><input id="seed" type="number" value={seed} onChange={(event) => setSeed(Number(event.target.value) || 0)} disabled={runState === 'running'} /></label></div></div>{formError && <p className="form-error" role="alert">{formError}</p>}<button className="run-button" type="button" onClick={() => void runComparison()} disabled={runState === 'running' || !profileReady}><span>{runState === 'running' ? '正在运行…' : '运行对比'}</span><span className="button-arrow" aria-hidden="true">↗</span></button>{runState === 'running' && <button className="cancel-button" type="button" onClick={cancelComparison}>取消本次运行</button>}{!profileReady && modelsLoaded && <p className="availability-hint">当前 profile 需要在 ruyi-serving 中同时注册两个后端模型。</p>}</aside>
           <section className="results-section"><div className="results-heading"><div><span className="section-index">03</span><span className="panel-label">LIVE RESULTS</span></div><span className="result-run-state">{runState === 'idle' ? 'READY TO RUN' : statusLabel(runState)}</span></div><div className="results-grid"><ResultCard backend="buddy" result={results.buddy} status={engineStatuses.buddy} /><ResultCard backend="llama" result={results.llama} status={engineStatuses.llama} /></div><div className={`summary-card ${hasResults ? 'summary-active' : ''}`}><div className="summary-main"><span className="summary-icon" aria-hidden="true">≈</span><div><p className="card-kicker">COMPARISON SUMMARY</p><strong>{summaryText}</strong></div></div><div className="summary-stats"><div><span>Buddy / llama</span><strong>{speedup === null ? '—' : `${formatNumber(speedup, 2)}x`}</strong></div><div><span>模式</span><strong>SEQUENTIAL</strong></div></div></div><p className="disclaimer">结果来自真实 ruyi-serving 请求。不同运行时、采样实现或模型精度可能产生不同文本；速度数据用于性能观察，不代表模型质量结论。</p></section></section>
       </main>
       <footer className="page-footer"><span>MLIR × GGML</span><span>LOCAL INFERENCE / 2026</span></footer>
