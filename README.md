@@ -4,6 +4,9 @@
 
 前端只负责展示和发起请求。两个模型进程应由 `/home/lijiaan/ruyi-serving` 的 `server_process` runtime 管理，浏览器不会执行本地命令。
 
+完整的模型准备、服务配置、启动和联调步骤见
+[`docs/ruyi-serving-integration.md`](docs/ruyi-serving-integration.md)。
+
 ## 运行
 
 ```bash
