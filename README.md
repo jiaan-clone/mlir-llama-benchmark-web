@@ -1,6 +1,6 @@
 # Buddy-MLIR vs llama.cpp Performance Lab
 
-这是一个面向本地推理的前端 MVP，用同一组 Prompt 和采样参数顺序请求 buddy-mlir 与 llama.cpp，并并排展示真实输出和 tokens/s、延迟、Token 用量等指标。
+这是一个面向本地推理的前端 MVP，可用同一组 Prompt 和采样参数单独请求 buddy-mlir 或 llama.cpp，也可顺序请求两者进行对比，并排展示真实输出和 tokens/s、延迟、Token 用量等指标。
 
 前端只负责展示和发起请求。两个模型进程应由 `/home/lijiaan/ruyi-serving` 的 `server_process` runtime 管理，浏览器不会执行本地命令。
 
@@ -52,7 +52,7 @@ VITE_RUYI_API_KEY=
 - `GET /v1/models`：读取可用模型
 - `POST /v1/responses`：分别请求两个模型
 
-单次请求使用相同的 `input`、`max_output_tokens`、`temperature` 和 seed，只替换 `model` 字段。两次请求严格顺序执行，第一版不启用流式输出。
+单次请求使用相同的 `input`、`max_output_tokens`、`temperature` 和 seed，只替换 `model` 字段。“运行对比”的两次请求严格顺序执行，也可通过独立按钮仅运行某一个后端；第一版不启用流式输出。
 
 响应中的 `usage` 和 `execution_metrics` 优先作为指标来源。如果服务没有返回 `tokens_per_second`，页面会根据输出 Token 数和 wall-clock 延迟计算，并明确标记为“前端计算”。
 

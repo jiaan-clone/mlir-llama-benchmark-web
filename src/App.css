@@ -146,6 +146,13 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .parameter-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
 .parameter-grid .field { min-width: 0; margin-bottom: 0; font-size: 11px; }
 .parameter-grid input { min-width: 0; padding: 0 9px; }
+.engine-run-actions { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.engine-run-button { min-height: 44px; padding: 0 11px; display: flex; align-items: center; justify-content: space-between; color: var(--navy); border: 1px solid var(--line); background: var(--card); font-size: 11px; font-weight: 600; transition: border-color .2s, background-color .2s, transform .2s; }
+.engine-run-button:hover:not(:disabled) { transform: translateY(-1px); }
+.engine-run-buddy { border-color: var(--accent-border); }
+.engine-run-buddy:hover:not(:disabled) { border-color: var(--orange); background: var(--focus-ring); }
+.engine-run-llama { border-color: var(--line); }
+.engine-run-llama:hover:not(:disabled) { border-color: var(--blue); background: var(--output-bg); }
 .run-button { width: 100%; min-height: 58px; margin-top: 12px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; color: var(--on-accent); border: 0; background: var(--button-bg); font-size: 15px; font-weight: 600; transition: background .2s, transform .2s; }
 .run-button:hover:not(:disabled) { background: var(--button-hover); transform: translateY(-1px); }
 .button-arrow { color: var(--orange); font-size: 22px; font-weight: 400; }
@@ -218,6 +225,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   .results-section { margin-top: 32px; }
   .results-grid { grid-template-columns: 1fr; }
   .output-panel { height: 150px; min-height: 150px; }
+  .engine-run-actions { gap: 8px; }
   .summary-card { display: block; }
   .summary-stats { margin-top: 18px; justify-content: flex-start; }
   .summary-stats div { text-align: left; }
@@ -232,6 +240,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   .status-strip .section-index { min-width: 32px; font-size: 24px; }
   .status-strip-heading > span:last-child { font-size: 11px; }
   .status-items { gap: 11px; }
+  .engine-run-actions { grid-template-columns: 1fr; }
   .text-button { width: 100%; text-align: left; }
   .summary-stats { gap: 18px; }
 }
