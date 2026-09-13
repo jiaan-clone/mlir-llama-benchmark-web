@@ -118,7 +118,7 @@ function App() {
     const [healthResult, modelsResult] = await Promise.allSettled([getHealth(), getModels()])
     if (healthResult.status === 'fulfilled') {
       const payload = healthResult.value
-      const healthy = payload.healthy === true || payload.status === 'ok' || payload.status === 'ready'
+      const healthy = payload.healthy === true || payload.status === 'ok' || payload.status === 'ready' || payload.status === 'healthy'
       setHealthStatus(healthy ? 'ready' : 'unavailable')
       if (!healthy) setHealthError(payload.status_message || payload.message || 'API 服务未就绪。')
     } else {

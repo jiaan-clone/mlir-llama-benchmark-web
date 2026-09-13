@@ -24,6 +24,14 @@ interface RawResponse {
     tokens_per_second?: number
     backend_model_id?: string
   }
+  ruyi?: {
+    execution_metrics?: {
+      latency_ms?: number
+      time_to_first_token_ms?: number
+      tokens_per_second?: number
+      backend_model_id?: string
+    }
+  }
   error?: { message?: string; code?: string } | string
 }
 
@@ -140,7 +148,7 @@ export function extractEngineResult(
   payload: RawResponse,
 ): EngineResult {
   const usage = payload.usage
-  const nativeMetrics = payload.execution_metrics
+  const nativeMetrics = payload.ruyi?.execution_metrics ?? payload.execution_metrics
   const latencyMs = numberOrNull(nativeMetrics?.latency_ms)
   const completionTokens = numberOrNull(usage?.output_tokens)
   const calculatedTps =
@@ -191,7 +199,7 @@ export async function runInference(
       ],
       max_output_tokens: params.maxOutputTokens,
       temperature: params.temperature,
-      backend_options: { seed: params.seed },
+      ruyi: { backend_options: { seed: params.seed } },
       stream: false,
     }),
   })) as RawResponse
