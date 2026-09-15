@@ -1,8 +1,9 @@
 # ruyi-serving 对接指南
 
-本文说明如何将 `mlir-llama-benchmark-web` 接入本机的
-`/path/to/ruyi-serving`，并通过同一个 Prompt 顺序运行 Buddy-MLIR 和
-llama.cpp。
+本文说明如何将 `mlir-llama-benchmark-web` 的 Buddy-MLIR 链路接入本机的
+`/path/to/ruyi-serving`。llama.cpp 现在由独立的 llama-server 直连，见
+[`llama-direct-integration.md`](llama-direct-integration.md)；前端仍可用同一个
+Prompt 顺序运行两侧。
 
 ## 1. 运行架构
 
@@ -12,11 +13,14 @@ llama.cpp。
 浏览器
   -> ruyi-serving API（FastAPI，默认 :8000）
   -> Compute Server（gRPC，默认 :9000）
-  -> Buddy-MLIR / llama.cpp 长驻模型服务
+  -> Buddy-MLIR 长驻模型服务
+
+浏览器 -> llama-server（独立 HTTP 服务，默认 :8080）
 ```
 
-`compute_server` 使用 `server_process` runtime 按需启动模型服务，并为每个
-模型分配本机回环端口。前端只负责调用 HTTP API、展示文本和性能指标。
+`compute_server` 使用 `server_process` runtime 按需启动 Buddy 模型服务，并为模型
+分配本机回环端口。llama-server 由单独进程管理。前端只负责调用 HTTP API、展示
+文本和性能指标。
 
 ## 2. 前置条件
 
@@ -92,18 +96,16 @@ cp models.json.example models.json
 
 其余超时和日志字段可以先保留示例默认值。
 
-### 3.2 注册两个独立模型 ID
+### 3.2 注册 Buddy 模型 ID
 
-前端 profile 需要两个不同的模型 ID：一个指向 Buddy-MLIR，一个指向
-llama.cpp。建议使用：
+直连架构下，ruyi-serving 只需要注册 Buddy-MLIR 模型。建议使用：
 
 ```text
 deepseek-r1-buddy
-deepseek-r1-llama
 ```
 
-在 `/path/to/ruyi-serving/models.json` 中注册两个模型。下面只展示关键
-字段；完整结构以 ruyi-serving 的 `docs/models.schema.json` 为准。
+在 `/path/to/ruyi-serving/models.json` 中注册该模型。下面只展示关键字段；完整
+结构以 ruyi-serving 的 `docs/models.schema.json` 为准。
 
 Buddy-MLIR 条目：
 
@@ -141,7 +143,11 @@ Buddy-MLIR 条目：
 }
 ```
 
-llama.cpp 条目：
+> 下面的 llama.cpp 条目是旧版“两个模型都由 ruyi-serving 管理”的迁移参考，
+> 直连模式不应再添加它；请使用 [`llama-direct-integration.md`](llama-direct-integration.md)
+> 启动独立 llama-server。
+
+旧版 llama.cpp 条目：
 
 ```json
 {
@@ -177,8 +183,8 @@ llama.cpp 条目：
 }
 ```
 
-两条记录的 `prompt_style` 应保持一致，保证 ruyi-serving 为两个后端渲染同一
-类对话模板。不要在 `extra_args` 中手动写 `--host` 或 `--port`，因为
+Buddy 记录的 `prompt_style` 按模型模板配置即可。不要在 `extra_args` 中手动写
+`--host` 或 `--port`，因为
 `compute_server` 会自动追加 `--host 127.0.0.1 --port <动态端口>`。
 
 > `allow_anonymous_models` 只适合本机联调。对外提供服务时应关闭它并配置 API
@@ -257,11 +263,10 @@ curl --noproxy '*' -sS http://127.0.0.1:8000/ready
 curl --noproxy '*' -sS http://127.0.0.1:8000/v1/models
 ```
 
-响应中必须同时出现：
+响应中至少应出现 Buddy 模型：
 
 ```text
 deepseek-r1-buddy
-deepseek-r1-llama
 ```
 
 如果配置了认证，需要增加：
@@ -291,7 +296,7 @@ curl --noproxy '*' -sS http://127.0.0.1:8000/v1/responses \
   }'
 ```
 
-将 `model` 换成 `deepseek-r1-llama` 再执行一次。成功响应的文本位于：
+成功响应的文本位于：
 
 ```text
 output[].content[].text
@@ -318,16 +323,19 @@ cp .env.example .env
 同机访问配置：
 
 ```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_DEFAULT_PROFILE_ID=deepseek-r1-1.5b
-VITE_MODEL_PROFILES_JSON=[{"id":"deepseek-r1-1.5b","name":"DeepSeek R1-Distill-Qwen-1.5B","buddyModelId":"deepseek-r1-buddy","llamaModelId":"deepseek-r1-llama"}]
+VITE_RUYI_API_BASE_URL=http://127.0.0.1:8000
 VITE_RUYI_API_KEY=
+VITE_LLAMA_SERVER_BASE_URL=http://127.0.0.1:8080
+VITE_LLAMA_SERVER_API_KEY=
+VITE_DEFAULT_PROFILE_ID=deepseek-r1-1.5b
+VITE_MODEL_PROFILES_JSON=[{"id":"deepseek-r1-1.5b","name":"DeepSeek R1-Distill-Qwen-1.5B","buddyModelId":"deepseek-r1-buddy","llamaModelId":"deepseek-r1-llama","llamaServerModelId":"deepseek-r1-llama"}]
 ```
 
-跨机器访问时，`VITE_API_BASE_URL` 要填写运行 ruyi-serving 那台机器的地址：
+跨机器访问时，`VITE_RUYI_API_BASE_URL` 要填写运行 ruyi-serving 那台机器的地址；`VITE_LLAMA_SERVER_BASE_URL` 填写 llama-server 地址：
 
 ```env
-VITE_API_BASE_URL=http://10.30.175.2:8000
+VITE_RUYI_API_BASE_URL=http://10.30.175.2:8000
+VITE_LLAMA_SERVER_BASE_URL=http://10.30.175.2:8080
 ```
 
 Vite 环境变量在启动/构建时读取，修改 `.env` 后需要重启前端：
@@ -346,7 +354,7 @@ http://10.30.175.2:5173
 页面加载后按以下顺序确认：
 
 1. 01 `RUNTIME STATUS` 可以访问；
-2. `/v1/models` 中两个模型均存在；
+2. ruyi `/v1/models` 中 Buddy 模型存在，llama `/v1/models` 请按直连指南检查；
 3. 02 profile 显示 DeepSeek R1；
 4. “运行对比”按钮可用；
 5. 03 区域先出现 Buddy-MLIR，再出现 llama.cpp 的结果；
@@ -412,9 +420,10 @@ curl --noproxy '*' -i http://127.0.0.1:8000/health
 ```
 
 如果端口被其他程序占用，停止占用进程或修改 `API_BIND_PORT`，并同步修改
-前端的 `VITE_API_BASE_URL`。
+前端的 `VITE_RUYI_API_BASE_URL`。llama-server 端口变化时同步修改
+`VITE_LLAMA_SERVER_BASE_URL`。
 
-### `/v1/models` 没有两个模型
+### ruyi `/v1/models` 没有 Buddy 模型
 
 - 检查 `compute_server.json` 的 `models.config_file`；
 - 检查 API `.env` 的 `MODELS_CONFIG_FILE`；

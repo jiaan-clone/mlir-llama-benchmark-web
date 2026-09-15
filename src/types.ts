@@ -1,17 +1,36 @@
 export type BackendKind = 'buddy' | 'llama'
+export type BackendAvailability = 'checking' | 'ready' | 'unavailable' | 'running'
+
+export interface BackendStatus {
+  healthStatus: Exclude<BackendAvailability, 'running'>
+  healthError: string
+  models: Set<string>
+  modelsLoaded: boolean
+  modelsError: string
+}
+
+export interface BackendConfig {
+  baseUrl: string
+  apiKey: string
+}
 
 export interface ModelProfile {
   id: string
   name: string
   buddyModelId: string
   llamaModelId: string
+  /** Optional llama-server alias; older profiles use llamaModelId. */
+  llamaServerModelId?: string
 }
 
-export interface RuyiModel {
+export interface ModelInfo {
   id: string
   owned_by?: string
   ready?: boolean
 }
+
+export type RuyiModel = ModelInfo
+export type LlamaModel = ModelInfo
 
 export interface HealthResponse {
   healthy?: boolean
@@ -46,4 +65,14 @@ export interface EngineResult {
   metrics: InferenceMetrics
   status: 'success' | 'error' | 'cancelled'
   error?: string
+}
+
+export interface BackendClient {
+  getHealth(signal?: AbortSignal): Promise<HealthResponse>
+  getModels(signal?: AbortSignal): Promise<ModelInfo[]>
+  runInference(
+    modelId: string,
+    params: InferenceRequest,
+    signal: AbortSignal,
+  ): Promise<EngineResult>
 }
