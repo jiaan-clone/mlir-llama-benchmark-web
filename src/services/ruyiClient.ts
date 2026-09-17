@@ -1,7 +1,8 @@
 import { ruyiConfig } from '../config'
-import type { BackendClient, BackendConfig, EngineResult, HealthResponse, InferenceRequest, ModelInfo } from '../types'
+import type { BackendClient, BackendConfig, EngineResult, HealthResponse, InferenceRequest, ModelInfo, StreamUpdateHandler } from '../types'
 import { requestJson, withServiceError } from './httpClient'
 import { parseHealthResponse, parseRuyiResponse } from './responseParsers'
+import { ruyiRequestBody, streamRuyiInference } from './ruyiStream'
 
 const serviceName = 'ruyi-serving'
 
@@ -43,16 +44,13 @@ export function createRuyiClient(config: BackendConfig = ruyiConfig): BackendCli
       const payload = await request('/v1/responses', {
         method: 'POST',
         signal,
-        body: JSON.stringify({
-          model: modelId,
-          input: [{ role: 'user', content: [{ type: 'input_text', text: params.prompt }] }],
-          max_output_tokens: params.maxOutputTokens,
-          temperature: params.temperature,
-          ruyi: { backend_options: { seed: params.seed } },
-          stream: false,
-        }),
+        body: ruyiRequestBody(modelId, params, false),
       })
       return parseRuyiResponse('buddy', modelId, payload)
+    },
+
+    streamInference(modelId: string, params: InferenceRequest, signal: AbortSignal, onUpdate: StreamUpdateHandler): Promise<EngineResult> {
+      return streamRuyiInference(modelId, params, signal, onUpdate, config)
     },
   }
 }
@@ -68,3 +66,4 @@ export const runRuyiInference = (
   params: InferenceRequest,
   signal: AbortSignal,
 ) => ruyiClient.runInference(modelId, params, signal)
+export { streamRuyiInference } from './ruyiStream'

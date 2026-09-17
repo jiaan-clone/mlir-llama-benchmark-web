@@ -64,9 +64,11 @@ llama-server 使用：
 - `GET /v1/models`：读取 llama 模型
 - `POST /v1/chat/completions`：OpenAI `messages`、`max_tokens`、`temperature`、`seed`，固定 `stream:false`
 
-单次请求使用相同的 Prompt、max tokens、temperature 和 seed，只替换协议与 model ID。“运行对比”的两次请求严格顺序执行，也可通过独立按钮仅运行某一个后端；第一版不启用流式输出。
+单次请求使用相同的 Prompt、max tokens、temperature 和 seed，只替换协议与 model ID。“运行对比”的两次请求严格顺序执行，也可通过独立按钮仅运行某一个后端。页面上的“Buddy 流式输出”默认关闭；开启后 Buddy 经 ruyi-serving 使用 `POST /v1/responses`、`stream:true`，运行时可看到增量文本和首个非空文本 delta 的观测时间。llama 页面仍为非流式。要回退，关闭开关并**手动重新运行**；出错或取消后不会自动重发推理请求。
 
-响应中的 `usage`、ruyi 的 `execution_metrics` 或 llama-server 的 `timings` 优先作为指标来源。如果服务没有返回 `tokens_per_second`，页面会根据输出 Token 数和 wall-clock 延迟计算，并明确标记为“前端计算”。
+Responses 流使用 `response.output_text.delta` 的顶层 `delta`；`response.completed`、`response.incomplete`、`response.failed` 是终态，也可能收到 `event: error`。它**没有 `[DONE]`**；终态中的 `response.output` 校准最终文本，`response.usage` 和 `response.ruyi.execution_metrics` 提供有效指标。`incomplete` 仍展示为结果，表示输出被 token 上限等原因截断。
+
+响应中的 `usage`、ruyi 的 `execution_metrics` 或 llama-server 的 `timings` 优先作为指标来源。如果没有后端 tokens/s，仅在有真实输出 Token 数及正延迟时计算：Buddy 用后端延迟（缺失则浏览器请求 wall-clock），llama 优先用 `predicted_ms`（缺失才用浏览器 wall-clock）。浏览器观测首文本时间包括网络、排队与网关过滤时间，不等于后端 `time_to_first_token_ms`；一个 SSE delta/chunk 也不代表一个 token。指标来源标签只描述 tokens/s，混合指标可能来自不同位置；两后端的 tokens/s 不保证完全同口径。
 
 ## 验证
 
@@ -80,7 +82,7 @@ npm run build
 ## 当前限制
 
 - 单页、单用户、单次顺序对比。
-- 非流式请求；组件结构为后续 SSE 扩展保留了边界。
+- Buddy 可选流式，llama 页面仍非流式；缺失用量显示不可用。
 - 不负责模型下载、转换、编译或启动后端进程。
 - tokens/s 取决于各服务是否返回原生 metrics；缺失时页面使用 wall-clock 估算并标记为“前端计算”。
 - API key 会由 Vite 注入前端构建产物，仅适合受信任的本地环境；不应将生产密钥放进公开部署的前端。

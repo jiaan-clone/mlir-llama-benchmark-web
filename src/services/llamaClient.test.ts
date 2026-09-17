@@ -112,6 +112,17 @@ describe('llama-server client', () => {
       prompt: 'error', maxOutputTokens: 8, temperature: 0, seed: 1,
     }, new AbortController().signal, undefined, { baseUrl: 'http://llama.test', apiKey: '' })).rejects.toThrow('bad stream')
   })
+
+  it.each([
+    ['data: {broken}\n\n', 'JSON'],
+    ['data: {"choices":[{"delta":{"content":"partial"}}]}\n\n', '[DONE]'],
+  ])('rejects a malformed or truncated llama SSE stream', async (data, error) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode(data)); controller.close() },
+    }))))
+    await expect(streamLlamaInference('alias', { prompt: 'x', maxOutputTokens: 8, temperature: 0, seed: 1 },
+      new AbortController().signal, undefined, { baseUrl: 'http://llama.test', apiKey: '' })).rejects.toThrow(error)
+  })
 })
 
 describe('llama response parser', () => {

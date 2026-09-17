@@ -169,9 +169,17 @@ export async function requestStream({
   }
 
   if (!response.ok) {
-    const payload = parsePayload(await response.text())
-    cleanup()
-    throw new HttpClientError(extractErrorMessage(payload, response.status), 'http', response.status)
+    try {
+      const payload = parsePayload(await response.text())
+      throw new HttpClientError(extractErrorMessage(payload, response.status), 'http', response.status)
+    } catch (error) {
+      if (error instanceof HttpClientError) throw error
+      if (parentSignal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
+      if (timedOut) throw new HttpClientError('请求超时。', 'timeout')
+      throw error
+    } finally {
+      cleanup()
+    }
   }
   return { response, cleanup, signal: controller.signal, didTimeout: () => timedOut }
 }

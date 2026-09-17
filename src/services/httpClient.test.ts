@@ -1,9 +1,40 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpClientError, requestJson } from './httpClient'
+import { HttpClientError, requestJson, requestStream } from './httpClient'
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
+})
+
+describe('requestStream lifecycle', () => {
+  it('rejects a pre-aborted signal and cleans up idempotently', async () => {
+    const parent = new AbortController()
+    parent.abort()
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
+      expect(init?.signal?.aborted).toBe(true)
+      return Promise.reject(new DOMException('aborted', 'AbortError'))
+    }))
+    await expect(requestStream({ baseUrl: 'http://example.test', path: '/stream', init: { signal: parent.signal } }))
+      .rejects.toMatchObject({ name: 'AbortError' })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('ok')))
+    const stream = await requestStream({ baseUrl: 'http://example.test', path: '/stream' })
+    stream.cleanup()
+    stream.cleanup()
+    expect(stream.signal.aborted).toBe(false)
+  })
+
+  it('cleans up when reading an HTTP error body fails', async () => {
+    vi.useFakeTimers()
+    const parent = new AbortController()
+    const signal = vi.spyOn(parent.signal, 'removeEventListener')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 503, text: () => Promise.reject(new Error('body failed')),
+    }))
+    await expect(requestStream({ baseUrl: 'http://example.test', path: '/stream', timeoutMs: 10, init: { signal: parent.signal } }))
+      .rejects.toThrow('body failed')
+    expect(signal).toHaveBeenCalledWith('abort', expect.any(Function))
+    expect(vi.getTimerCount()).toBe(0)
+  })
 })
 
 describe('requestJson', () => {

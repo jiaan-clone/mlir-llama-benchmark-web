@@ -1,11 +1,14 @@
-/** Incremental SSE parser that preserves events split across fetch chunks. */
-export class SseEventParser {
+export interface SseEvent { event: string | null; data: string }
+
+/** Only dispatch fully framed SSE events (a blank line); discard EOF fragments. */
+export class NamedSseEventParser {
   private buffer = ''
   private dataLines: string[] = []
+  private eventName: string | null = null
 
-  push(chunk: string): string[] {
+  push(chunk: string): SseEvent[] {
     this.buffer += chunk
-    const events: string[] = []
+    const events: SseEvent[] = []
     let lineEnd = this.findLineEnd()
     while (lineEnd !== null) {
       const line = this.buffer.slice(0, lineEnd.index)
@@ -16,14 +19,11 @@ export class SseEventParser {
     return events
   }
 
-  flush(): string[] {
-    const events: string[] = []
-    if (this.buffer) {
-      this.consumeLine(this.buffer, events)
-      this.buffer = ''
-    }
-    this.emitEvent(events)
-    return events
+  flush(): SseEvent[] {
+    this.buffer = ''
+    this.dataLines = []
+    this.eventName = null
+    return []
   }
 
   private findLineEnd(): { index: number; nextIndex: number } | null {
@@ -31,6 +31,7 @@ export class SseEventParser {
     const carriageReturnIndex = this.buffer.indexOf('\r')
     if (newlineIndex === -1 && carriageReturnIndex === -1) return null
     if (newlineIndex === -1 || (carriageReturnIndex !== -1 && carriageReturnIndex < newlineIndex)) {
+      if (carriageReturnIndex === this.buffer.length - 1) return null
       return {
         index: carriageReturnIndex,
         nextIndex: this.buffer[carriageReturnIndex + 1] === '\n' ? carriageReturnIndex + 2 : carriageReturnIndex + 1,
@@ -39,66 +40,32 @@ export class SseEventParser {
     return { index: newlineIndex, nextIndex: newlineIndex + 1 }
   }
 
-  private consumeLine(line: string, events: string[]): void {
+  private consumeLine(line: string, events: SseEvent[]): void {
     if (!line) {
       this.emitEvent(events)
       return
     }
     if (line.startsWith(':')) return
-    if (line.startsWith('data:')) this.dataLines.push(line.slice(5).replace(/^ /, ''))
+    const separator = line.indexOf(':')
+    const field = separator < 0 ? line : line.slice(0, separator)
+    const value = separator < 0 ? '' : line.slice(separator + 1).replace(/^ /, '')
+    if (field === 'data') this.dataLines.push(value)
+    if (field === 'event') this.eventName = value || null
   }
 
-  private emitEvent(events: string[]): void {
-    if (this.dataLines.length === 0) return
-    events.push(this.dataLines.join('\n'))
+  private emitEvent(events: SseEvent[]): void {
+    if (this.dataLines.length) events.push({ event: this.eventName, data: this.dataLines.join('\n') })
     this.dataLines = []
+    this.eventName = null
   }
 }
 
-export type ParsedLlamaSseEvent =
-  | { kind: 'delta'; delta: string; finishReason: string | null; usage: Record<string, unknown> | null; timings: Record<string, unknown> | null }
-  | { kind: 'done' }
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' ? value as Record<string, unknown> : null
+/** Compatibility wrapper for llama's data-only SSE protocol. */
+export class SseEventParser {
+  private parser = new NamedSseEventParser()
+  push(chunk: string): string[] { return this.parser.push(chunk).map((event) => event.data) }
+  flush(): string[] { return this.parser.flush().map((event) => event.data) }
 }
 
-function stringOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() ? value : null
-}
-
-function contentText(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (!Array.isArray(value)) return ''
-  return value.map((part) => {
-    const record = asRecord(part)
-    return record && typeof record.text === 'string' ? record.text : ''
-  }).join('')
-}
-
-/** Convert one SSE data payload into a safe llama streaming event. */
-export function parseLlamaSseEvent(data: string): ParsedLlamaSseEvent | null {
-  if (data.trim() === '[DONE]') return { kind: 'done' }
-  let payload: unknown
-  try {
-    payload = JSON.parse(data) as unknown
-  } catch {
-    return null
-  }
-  const root = asRecord(payload)
-  if (!root) return null
-  if (root.error !== undefined) {
-    const message = typeof root.error === 'string' ? root.error : asRecord(root.error)?.message
-    throw new Error(typeof message === 'string' && message.trim() ? message : 'llama-server 流式响应失败。')
-  }
-  const choices = Array.isArray(root.choices) ? root.choices : []
-  const choice = asRecord(choices[0])
-  const delta = asRecord(choice?.delta)
-  return {
-    kind: 'delta',
-    delta: contentText(delta?.content),
-    finishReason: stringOrNull(choice?.finish_reason),
-    usage: asRecord(root.usage),
-    timings: asRecord(root.timings),
-  }
-}
+export { parseLlamaSseEvent } from './llamaStreamParser'
+export type { ParsedLlamaSseEvent } from './llamaStreamParser'

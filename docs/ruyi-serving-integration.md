@@ -313,6 +313,44 @@ ruyi.execution_metrics.tokens_per_second
 DeepSeek R1 可能在输出最终答案前消耗较多 reasoning token；正常检查不要把
 `max_output_tokens` 设得过小。
 
+### 5.4 Buddy Responses 流式请求
+
+页面“Buddy 流式输出”默认关闭；开启后仅 Buddy 使用 SSE，llama 页面仍为非流式。
+流式出错或取消不会自动用非流式重发。手动关闭开关并重新运行即可回退。
+浏览器仍只连接 ruyi-serving，不直连 compute_server 分配的 buddy-server 端口。
+
+```bash
+curl --noproxy '*' -N -sS http://127.0.0.1:8000/v1/responses \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream' \
+  -H 'Authorization: Bearer <CLIENT_API_KEY>' \
+  -d '{
+    "model": "<BUDDY_MODEL_ID>",
+    "input": [{"role": "user", "content": [{"type": "input_text", "text": "Say READY only."}]}],
+    "max_output_tokens": 128,
+    "temperature": 0,
+    "ruyi": {"backend_options": {"seed": 42}},
+    "stream": true
+  }'
+```
+
+未开启认证时去掉 Authorization 行。响应 Content-Type 应为 `text/event-stream`，
+`event: response.output_text.delta` 的顶层 `delta` 是文本增量；
+`response.completed`、`response.incomplete`（例如达到输出 token 上限）、
+`response.failed` 之一是正常终止类型，故障也可能是 `event: error`。
+Responses **不发送 `[DONE]`**。终态 `response.output[].content[].text` 校准最终文本，
+`response.usage` 是实际用量，`response.ruyi.execution_metrics` 是后端执行指标。
+截断的 `incomplete` 仍展示已有内容，不当作服务断连。
+
+首个非空文本 delta 的浏览器观测时间包括网络传输、排队与可能的网关过滤延迟，
+不等于后端 `time_to_first_token_ms`。一个 SSE chunk 或 delta 可能包含多个 token，
+不能从事件数或字符数推算用量。有效后端指标优先，缺失延迟用请求 wall-clock，
+缺失后端 TTFT 用浏览器观测值。缺失 token 用量不填 0，也不估算 TPS；仅有
+真实输出 token 数和正延迟时才计算 TPS fallback。非流式 Buddy fallback
+用请求 wall-clock；llama 非流式优先用 `predicted_ms`，无此值才用请求 wall-clock。
+页面的“前端计算”标签只描述 TPS 来源，并不意味着每个指标同源；两侧 TPS
+也不保证严格同口径。
+
 ## 6. 配置并启动前端
 
 ```bash
@@ -446,6 +484,18 @@ test -f /path/to/models/deepseek-r1/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf
 
 将浏览器地址栏中的完整 origin（例如 `http://10.30.175.2:5173`）加入
 `CORS_ALLOW_ORIGINS`，重启 FastAPI。不要只填写 IP，也不要写前端页面路径。
+
+### 流式首文本很迟、缺少终态或取消后仍占用计算
+
+- 检查浏览器 Network 中 `OPTIONS` 预检的允许 Origin、Authorization 和
+  Content-Type 头。地址、协议或端口不一致都可能让浏览器拦截请求。
+- 反向代理缓冲或压缩可能合并 SSE 数据；对比 `curl -N` 的增量到达时间与
+  浏览器观测值，检查代理缓冲、压缩配置，再决定是否修改代理。
+- 未收到终态就断开、或超过总请求超时，会显示错误而不是成功；检查 API、
+  Compute Server 和模型进程日志。首次模型加载可能耗费很长时间，极小的
+  DeepSeek 输出预算也可能没有可见回答，不能仅以空文本判断 SSE 故障。
+- 浏览器取消会中止 fetch/reader，但 AbortError 本身不能证明后端计算已停止；
+  要结合服务日志观察取消是否经 Compute Server 传播并释放当前任务。
 
 ## 10. 安全和性能基线
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLlamaSseEvent, SseEventParser } from './sseParser'
+import { NamedSseEventParser, parseLlamaSseEvent, SseEventParser } from './sseParser'
 
 describe('SseEventParser', () => {
   it('reassembles events split across chunks and supports CRLF', () => {
@@ -11,10 +11,27 @@ describe('SseEventParser', () => {
     ])
   })
 
-  it('flushes an unterminated final event and ignores comments', () => {
+  it('discards an unterminated final event and ignores comments', () => {
     const parser = new SseEventParser()
     expect(parser.push(': keep-alive\n\ndata: {"choices":[]}')).toEqual([])
-    expect(parser.flush()).toEqual(['{"choices":[]}'])
+    expect(parser.flush()).toEqual([])
+  })
+
+  it('keeps named events and multi-line/empty data across arbitrary CRLF splits', () => {
+    const parser = new NamedSseEventParser()
+    expect(parser.push(': ping\r')).toEqual([])
+    expect(parser.push('\n\r')).toEqual([])
+    expect(parser.push('\nevent: response.output_text.delta\r')).toEqual([])
+    expect(parser.push('\ndata: 你\r\ndata: 好\r\nunknown: x\r\n\r')).toEqual([])
+    expect(parser.push('\ndata\r\n\r')).toEqual([{ event: 'response.output_text.delta', data: '你\n好' }])
+    expect(parser.push('\n')).toEqual([{ event: null, data: '' }])
+    expect(parser.flush()).toEqual([])
+  })
+
+  it('does not dispatch incomplete lines or half JSON at EOF', () => {
+    const parser = new NamedSseEventParser()
+    expect(parser.push('event: response.completed\ndata: {"response":')).toEqual([])
+    expect(parser.flush()).toEqual([])
   })
 })
 

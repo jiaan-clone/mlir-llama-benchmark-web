@@ -1,14 +1,11 @@
 import { extractErrorMessage } from './httpClient'
 import type { BackendKind, EngineResult, HealthResponse, InferenceMetrics } from '../types'
+import { validMeasurement, validTokenCount } from '../metrics'
 
 type RecordValue = Record<string, unknown>
 
 function asRecord(value: unknown): RecordValue | null {
   return value && typeof value === 'object' ? value as RecordValue : null
-}
-
-function numberOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 function stringOrNull(value: unknown): string | null {
@@ -66,20 +63,20 @@ export function parseRuyiResponse(
   const usage = asRecord(root.usage)
   const nativeMetrics = asRecord(asRecord(root.ruyi)?.execution_metrics) ?? asRecord(root.execution_metrics)
   const status = stringOrNull(root.status)
-  const latencyMs = numberOrNull(nativeMetrics?.latency_ms)
-  const completionTokens = numberOrNull(usage?.output_tokens)
-  const backendTokensPerSecond = numberOrNull(nativeMetrics?.tokens_per_second)
+  const latencyMs = validMeasurement(nativeMetrics?.latency_ms)
+  const completionTokens = validTokenCount(usage?.output_tokens)
+  const backendTokensPerSecond = validMeasurement(nativeMetrics?.tokens_per_second)
   const calculatedTps =
     latencyMs !== null && latencyMs > 0 && completionTokens !== null
-      ? completionTokens / (latencyMs / 1000)
+      ? validMeasurement(completionTokens / (latencyMs / 1000))
       : null
   const metrics: InferenceMetrics = {
     latencyMs,
-    timeToFirstTokenMs: numberOrNull(nativeMetrics?.time_to_first_token_ms),
+    timeToFirstTokenMs: validMeasurement(nativeMetrics?.time_to_first_token_ms),
     tokensPerSecond: backendTokensPerSecond ?? calculatedTps,
-    promptTokens: numberOrNull(usage?.input_tokens),
+    promptTokens: validTokenCount(usage?.input_tokens),
     completionTokens,
-    totalTokens: numberOrNull(usage?.total_tokens),
+    totalTokens: validTokenCount(usage?.total_tokens),
     metricsSource: backendTokensPerSecond !== null ? 'backend' : calculatedTps !== null ? 'frontend' : 'unavailable',
   }
   const failed = status === 'failed'
@@ -127,20 +124,20 @@ export function parseLlamaResponse(modelId: string, payload: unknown): EngineRes
   const message = asRecord(firstChoice?.message)
   const usage = asRecord(root.usage)
   const timings = asRecord(root.timings)
-  const promptTokens = numberOrNull(usage?.prompt_tokens) ?? numberOrNull(timings?.prompt_n)
-  const completionTokens = numberOrNull(usage?.completion_tokens) ?? numberOrNull(timings?.predicted_n)
-  const totalTokens = numberOrNull(usage?.total_tokens) ?? (
-    promptTokens !== null && completionTokens !== null ? promptTokens + completionTokens : null
+  const promptTokens = validTokenCount(usage?.prompt_tokens) ?? validTokenCount(timings?.prompt_n)
+  const completionTokens = validTokenCount(usage?.completion_tokens) ?? validTokenCount(timings?.predicted_n)
+  const totalTokens = validTokenCount(usage?.total_tokens) ?? (
+    promptTokens !== null && completionTokens !== null ? validTokenCount(promptTokens + completionTokens) : null
   )
-  const promptMs = numberOrNull(timings?.prompt_ms)
-  const predictedMs = numberOrNull(timings?.predicted_ms)
-  const latencyMs = numberOrNull(timings?.total_ms) ?? (
-    promptMs !== null && predictedMs !== null ? promptMs + predictedMs : predictedMs
+  const promptMs = validMeasurement(timings?.prompt_ms)
+  const predictedMs = validMeasurement(timings?.predicted_ms)
+  const latencyMs = validMeasurement(timings?.total_ms) ?? (
+    promptMs !== null && predictedMs !== null ? validMeasurement(promptMs + predictedMs) : predictedMs
   )
-  const backendTokensPerSecond = numberOrNull(timings?.predicted_per_second) ?? numberOrNull(timings?.prompt_per_second)
+  const backendTokensPerSecond = validMeasurement(timings?.predicted_per_second) ?? validMeasurement(timings?.prompt_per_second)
   const calculatedTps =
     backendTokensPerSecond === null && predictedMs !== null && predictedMs > 0 && completionTokens !== null
-      ? completionTokens / (predictedMs / 1000)
+      ? validMeasurement(completionTokens / (predictedMs / 1000))
       : null
   const metrics: InferenceMetrics = {
     latencyMs,

@@ -47,14 +47,15 @@ export interface InferenceRequest {
   seed: number
 }
 
-export interface LlamaStreamUpdate {
+export interface EngineStreamUpdate {
   delta: string
   text: string
   timeToFirstTokenMs: number | null
   finishReason: string | null
 }
 
-export type StreamUpdateHandler = (update: LlamaStreamUpdate) => void
+export type LlamaStreamUpdate = EngineStreamUpdate
+export type StreamUpdateHandler = (update: EngineStreamUpdate) => void
 
 export interface InferenceMetrics {
   latencyMs: number | null

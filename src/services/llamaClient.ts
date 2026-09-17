@@ -1,8 +1,10 @@
 import { llamaServerConfig } from '../config'
-import type { BackendClient, BackendConfig, EngineResult, HealthResponse, InferenceRequest, LlamaStreamUpdate, ModelInfo, ModelProfile, StreamUpdateHandler } from '../types'
-import { HttpClientError, isAbortError, requestJson, requestStream, withServiceError } from './httpClient'
+import { withWallClockFallback } from '../metrics'
+import type { BackendClient, BackendConfig, EngineResult, HealthResponse, InferenceRequest, EngineStreamUpdate, ModelInfo, ModelProfile, StreamUpdateHandler } from '../types'
+import { HttpClientError, requestJson, requestStream, withServiceError } from './httpClient'
+import { readSseStream } from './readSseStream'
 import { parseHealthResponse, parseLlamaResponse } from './responseParsers'
-import { parseLlamaSseEvent, SseEventParser } from './sseParser'
+import { parseLlamaSseEvent } from './llamaStreamParser'
 
 const serviceName = 'llama-server'
 
@@ -72,16 +74,12 @@ export async function streamLlamaInference(
     throw withServiceError(error, serviceName)
   }
 
-  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
   let text = ''
   let finishReason: string | null = null
   let firstTokenMs: number | null = null
   let usage: Record<string, unknown> | null = null
   let timings: Record<string, unknown> | null = null
   let done = false
-  const parser = new SseEventParser()
-  const decoder = new TextDecoder()
-
   const consumeEvent = (data: string): void => {
     const event = parseLlamaSseEvent(data)
     if (!event) return
@@ -96,7 +94,7 @@ export async function streamLlamaInference(
     finishReason = event.finishReason ?? finishReason
     usage = event.usage ?? usage
     timings = event.timings ?? timings
-    const update: LlamaStreamUpdate = {
+    const update: EngineStreamUpdate = {
       delta: event.delta,
       text,
       timeToFirstTokenMs: firstTokenMs,
@@ -106,54 +104,20 @@ export async function streamLlamaInference(
   }
 
   try {
-    if (!stream.response.body) throw new Error('llama-server 未返回可读取的响应流。')
-    reader = stream.response.body.getReader()
-    while (!done) {
-      const { done: readDone, value } = await reader.read()
-      if (readDone) break
-      if (!value) continue
-      for (const data of parser.push(decoder.decode(value, { stream: true }))) {
-        consumeEvent(data)
-        if (done) break
-      }
-    }
-    if (!done) {
-      for (const data of parser.push(decoder.decode())) consumeEvent(data)
-      for (const data of parser.flush()) consumeEvent(data)
-    }
+    await readSseStream(stream.response, stream.signal, ({ data }) => {
+      consumeEvent(data)
+      return done
+    })
+    if (!done) throw new Error('llama-server 响应流中断：未收到 [DONE]。')
     const elapsedMs = performance.now() - startedAt
     const parsed = parseLlamaResponse(modelId, streamResultPayload(text, finishReason, usage, timings))
-    const latencyMs = parsed.metrics.latencyMs ?? elapsedMs
-    const completionTokens = parsed.metrics.completionTokens
-    const tokensPerSecond = parsed.metrics.tokensPerSecond ?? (
-      completionTokens !== null && latencyMs > 0 ? completionTokens / (latencyMs / 1000) : null
-    )
-    return {
-      ...parsed,
-      metrics: {
-        ...parsed.metrics,
-        latencyMs,
-        timeToFirstTokenMs: firstTokenMs,
-        tokensPerSecond,
-        metricsSource: parsed.metrics.metricsSource === 'backend'
-          ? 'backend'
-          : tokensPerSecond === null ? 'unavailable' : 'frontend',
-      },
-    }
+    return withWallClockFallback(parsed, elapsedMs, firstTokenMs)
   } catch (error) {
-    if (isAbortError(error) && stream.didTimeout()) {
+    if (stream.didTimeout()) {
       throw withServiceError(new HttpClientError('请求超时。', 'timeout'), serviceName)
     }
     throw withServiceError(error, serviceName)
   } finally {
-    if (reader) {
-      try {
-        await reader.cancel()
-      } catch {
-        // The server may already have closed the stream.
-      }
-      reader.releaseLock()
-    }
     stream.cleanup()
   }
 }
