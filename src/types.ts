@@ -47,6 +47,15 @@ export interface InferenceRequest {
   seed: number
 }
 
+export interface LlamaStreamUpdate {
+  delta: string
+  text: string
+  timeToFirstTokenMs: number | null
+  finishReason: string | null
+}
+
+export type StreamUpdateHandler = (update: LlamaStreamUpdate) => void
+
 export interface InferenceMetrics {
   latencyMs: number | null
   timeToFirstTokenMs: number | null
@@ -75,4 +84,10 @@ export interface BackendClient {
     params: InferenceRequest,
     signal: AbortSignal,
   ): Promise<EngineResult>
+  streamInference?: (
+    modelId: string,
+    params: InferenceRequest,
+    signal: AbortSignal,
+    onUpdate: StreamUpdateHandler,
+  ) => Promise<EngineResult>
 }

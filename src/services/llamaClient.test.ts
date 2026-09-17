@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createLlamaClient, resolveLlamaModelId } from './llamaClient'
+import { createLlamaClient, resolveLlamaModelId, streamLlamaInference } from './llamaClient'
 import { parseLlamaResponse } from './responseParsers'
 
 afterEach(() => vi.restoreAllMocks())
@@ -40,6 +40,77 @@ describe('llama-server client', () => {
       messages: [{ role: 'user', content: 'Say hello' }],
     })
     expect(new Headers(request.headers).get('Authorization')).toBe('Bearer key')
+  })
+
+  it('streams UTF-8 chunks, reports first token time, and keeps the non-stream result shape', async () => {
+    const payload = [
+      `data: ${JSON.stringify({ choices: [{ delta: { role: 'assistant' }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '你' }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '好' }, finish_reason: null }] })}\n\n`,
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 4, completion_tokens: 2, total_tokens: 6 }, timings: { predicted_per_second: 10, total_ms: 300 } })}\n\n`,
+      'data: [DONE]\n\n',
+    ].join('')
+    const encoded = new TextEncoder().encode(payload)
+    const splitAt = encoded.findIndex((byte, index) => byte >= 0x80 && index > 0) + 1
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoded.slice(0, splitAt))
+        controller.enqueue(encoded.slice(splitAt))
+        controller.close()
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })))
+
+    const updates: string[] = []
+    const result = await streamLlamaInference('alias', {
+      prompt: '你好', maxOutputTokens: 32, temperature: 0, seed: 42,
+    }, new AbortController().signal, (update) => updates.push(update.text), {
+      baseUrl: 'http://llama.test', apiKey: '',
+    })
+
+    expect(updates).toEqual(['', '你', '你好', '你好'])
+    expect(result.text).toBe('你好')
+    expect(result.metrics.timeToFirstTokenMs).not.toBeNull()
+    expect(result.metrics.latencyMs).toBe(300)
+    expect(result.metrics.tokensPerSecond).toBe(10)
+    expect(result.metrics.metricsSource).toBe('backend')
+    expect(result.finishReason).toBe('stop')
+    const request = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][1] as RequestInit
+    expect(JSON.parse(String(request.body))).toMatchObject({ stream: true, max_tokens: 32 })
+  })
+
+  it('propagates stream cancellation as AbortError and releases the reader', async () => {
+    const controller = new AbortController()
+    let bodyController: ReadableStreamDefaultController<Uint8Array> | null = null
+    const body = new ReadableStream<Uint8Array>({
+      start(nextController) {
+        bodyController = nextController
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => {
+      init?.signal?.addEventListener('abort', () => bodyController?.error(new DOMException('aborted', 'AbortError')), { once: true })
+      return Promise.resolve(new Response(body, { status: 200 }))
+    }))
+
+    const pending = streamLlamaInference('alias', {
+      prompt: 'cancel', maxOutputTokens: 8, temperature: 0, seed: 1,
+    }, controller.signal, undefined, { baseUrl: 'http://llama.test', apiKey: '' })
+    await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0))
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('surfaces an SSE server error', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(nextController) {
+        nextController.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ error: 'bad stream' })}\n\n`))
+        nextController.close()
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })))
+    await expect(streamLlamaInference('alias', {
+      prompt: 'error', maxOutputTokens: 8, temperature: 0, seed: 1,
+    }, new AbortController().signal, undefined, { baseUrl: 'http://llama.test', apiKey: '' })).rejects.toThrow('bad stream')
   })
 })
 

@@ -20,6 +20,13 @@ export interface HttpRequestOptions {
   timeoutMs?: number
 }
 
+export interface HttpStreamResponse {
+  response: Response
+  cleanup: () => void
+  signal: AbortSignal
+  didTimeout: () => boolean
+}
+
 export function isAbortError(error: unknown): error is DOMException {
   return error instanceof DOMException && error.name === 'AbortError'
 }
@@ -110,6 +117,63 @@ export async function requestJson<T = unknown>({
     throw new HttpClientError(extractErrorMessage(payload, response.status), 'http', response.status)
   }
   return payload as T | null
+}
+
+/**
+ * Start a response-body stream while keeping the shared auth, timeout and
+ * parent-signal behavior. The caller must invoke cleanup when the body ends.
+ */
+export async function requestStream({
+  baseUrl,
+  apiKey,
+  path,
+  init = {},
+  timeoutMs = 120_000,
+}: HttpRequestOptions): Promise<HttpStreamResponse> {
+  const controller = new AbortController()
+  const parentSignal = init.signal
+  let timedOut = false
+  let cleanedUp = false
+  const timeoutId = globalThis.setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
+  const onParentAbort = () => controller.abort()
+  parentSignal?.addEventListener('abort', onParentAbort, { once: true })
+  if (parentSignal?.aborted) controller.abort()
+
+  const cleanup = () => {
+    if (cleanedUp) return
+    cleanedUp = true
+    globalThis.clearTimeout(timeoutId)
+    parentSignal?.removeEventListener('abort', onParentAbort)
+  }
+
+  const headers = new Headers(init.headers)
+  if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json')
+  if (apiKey && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${apiKey}`)
+
+  let response: Response
+  try {
+    response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers,
+    })
+  } catch (error) {
+    cleanup()
+    if (parentSignal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
+    if (timedOut) throw new HttpClientError('请求超时，请确认服务仍在运行或检查后端日志。', 'timeout')
+    if (isAbortError(error)) throw new HttpClientError('请求已取消。', 'abort')
+    throw new HttpClientError('无法连接后端服务，请确认服务已启动。', 'network')
+  }
+
+  if (!response.ok) {
+    const payload = parsePayload(await response.text())
+    cleanup()
+    throw new HttpClientError(extractErrorMessage(payload, response.status), 'http', response.status)
+  }
+  return { response, cleanup, signal: controller.signal, didTimeout: () => timedOut }
 }
 
 export { extractErrorMessage }
