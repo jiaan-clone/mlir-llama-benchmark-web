@@ -45,7 +45,7 @@ export function createRuyiClient(config: BackendConfig = ruyiConfig): BackendCli
         method: 'POST',
         signal,
         body: ruyiRequestBody(modelId, params, false),
-      })
+      }, config.inferenceTimeoutMs ?? 120_000)
       return parseRuyiResponse('buddy', modelId, payload)
     },
 

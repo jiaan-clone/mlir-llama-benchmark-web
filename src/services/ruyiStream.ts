@@ -30,7 +30,7 @@ export async function streamRuyiInference(
     stream = await requestStream({
       ...config,
       path: '/v1/responses',
-      timeoutMs: 120_000,
+      timeoutMs: config.inferenceTimeoutMs ?? 120_000,
       init: {
         method: 'POST', signal,
         headers: { Accept: 'text/event-stream' },

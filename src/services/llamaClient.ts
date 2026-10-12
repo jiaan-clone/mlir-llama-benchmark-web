@@ -55,7 +55,7 @@ export async function streamLlamaInference(
     stream = await requestStream({
       ...config,
       path: '/v1/chat/completions',
-      timeoutMs: 120_000,
+      timeoutMs: config.inferenceTimeoutMs ?? 120_000,
       init: {
         method: 'POST',
         signal,
@@ -123,7 +123,7 @@ export async function streamLlamaInference(
 }
 
 export function createLlamaClient(config: BackendConfig = llamaServerConfig): BackendClient {
-  const request = async <T>(path: string, init: RequestInit = {}, timeoutMs = 120_000): Promise<T | null> => {
+  const request = async <T>(path: string, init: RequestInit = {}, timeoutMs = config.inferenceTimeoutMs ?? 120_000): Promise<T | null> => {
     try {
       return await requestJson<T>({ ...config, path, init, timeoutMs })
     } catch (error) {

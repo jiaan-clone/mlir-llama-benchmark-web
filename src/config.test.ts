@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { parseModelProfiles } from './config'
+import { parseInferenceTimeoutMs, parseModelProfiles } from './config'
 
 afterEach(() => {
   vi.unstubAllEnvs()
 })
 
 describe('configuration parsing', () => {
+  it('validates inference timeouts without overflowing browser timers', () => {
+    expect(parseInferenceTimeoutMs('1800000')).toBe(1800000)
+    for (const value of [undefined, '', '0', '-1', 'bad', 'Infinity', '1.5', '2147483648']) {
+      expect(parseInferenceTimeoutMs(value)).toBe(120000)
+    }
+  })
   it('supports the optional llama-server model alias', () => {
     const [profile] = parseModelProfiles(JSON.stringify([{
       id: 'demo',
@@ -37,11 +43,13 @@ describe('configuration parsing', () => {
     vi.stubEnv('VITE_API_BASE_URL', 'http://legacy.test/')
     vi.stubEnv('VITE_LLAMA_SERVER_BASE_URL', 'http://llama.test/')
     vi.stubEnv('VITE_RUYI_API_KEY', 'ruyi-key')
+    vi.stubEnv('VITE_RUYI_INFERENCE_TIMEOUT_MS', '1800000')
     vi.stubEnv('VITE_LLAMA_SERVER_API_KEY', 'llama-key')
+    vi.stubEnv('VITE_LLAMA_INFERENCE_TIMEOUT_MS', '900000')
     vi.resetModules()
     const configured = await import('./config')
-    expect(configured.ruyiConfig).toEqual({ baseUrl: 'http://new-ruyi.test', apiKey: 'ruyi-key' })
-    expect(configured.llamaServerConfig).toEqual({ baseUrl: 'http://llama.test', apiKey: 'llama-key' })
+    expect(configured.ruyiConfig).toEqual({ baseUrl: 'http://new-ruyi.test', apiKey: 'ruyi-key', inferenceTimeoutMs: 1800000 })
+    expect(configured.llamaServerConfig).toEqual({ baseUrl: 'http://llama.test', apiKey: 'llama-key', inferenceTimeoutMs: 900000 })
 
     vi.stubEnv('VITE_RUYI_API_BASE_URL', '')
     vi.resetModules()

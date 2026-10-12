@@ -47,6 +47,11 @@ function cleanBaseUrl(value: string | undefined, fallback: string): string {
 
 const env = import.meta.env
 
+export function parseInferenceTimeoutMs(value: string | undefined): number {
+  const timeout = Number(value)
+  return Number.isInteger(timeout) && timeout > 0 && timeout <= 2_147_483_647 ? timeout : 120_000
+}
+
 /** Configuration for the gateway that fronts Buddy-MLIR. */
 export const ruyiConfig: BackendConfig = {
   baseUrl: cleanBaseUrl(
@@ -54,12 +59,14 @@ export const ruyiConfig: BackendConfig = {
     'http://127.0.0.1:8000',
   ),
   apiKey: env.VITE_RUYI_API_KEY?.trim() || '',
+  inferenceTimeoutMs: parseInferenceTimeoutMs(env.VITE_RUYI_INFERENCE_TIMEOUT_MS),
 }
 
 /** Configuration for a standalone llama-server OpenAI-compatible endpoint. */
 export const llamaServerConfig: BackendConfig = {
   baseUrl: cleanBaseUrl(env.VITE_LLAMA_SERVER_BASE_URL, 'http://127.0.0.1:8080'),
   apiKey: env.VITE_LLAMA_SERVER_API_KEY?.trim() || '',
+  inferenceTimeoutMs: parseInferenceTimeoutMs(env.VITE_LLAMA_INFERENCE_TIMEOUT_MS),
 }
 
 /** Backwards-compatible facade exports used by older integrations. */

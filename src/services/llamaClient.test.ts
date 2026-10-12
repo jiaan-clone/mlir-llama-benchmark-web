@@ -42,6 +42,30 @@ describe('llama-server client', () => {
     expect(new Headers(request.headers).get('Authorization')).toBe('Bearer key')
   })
 
+  it('uses the configured timeout for non-stream inference', async () => {
+    vi.useFakeTimers()
+    try {
+      let requestSignal: AbortSignal | undefined
+      vi.stubGlobal('fetch', vi.fn((_url, init: RequestInit) => new Promise((_resolve, reject) => {
+        requestSignal = init.signal as AbortSignal
+        requestSignal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      })))
+      const client = createLlamaClient({ baseUrl: 'http://llama.test', apiKey: '', inferenceTimeoutMs: 1800000 })
+      const pending = client.runInference('alias', {
+        prompt: 'hello', maxOutputTokens: 12, temperature: 0, seed: 42,
+      }, new AbortController().signal)
+      const expectation = expect(pending).rejects.toThrow('llama-server 请求超时')
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(requestSignal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1680000)
+      await expectation
+      expect(requestSignal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('streams UTF-8 chunks, reports first token time, and keeps the non-stream result shape', async () => {
     const payload = [
       `data: ${JSON.stringify({ choices: [{ delta: { role: 'assistant' }, finish_reason: null }] })}\n\n`,
@@ -98,6 +122,32 @@ describe('llama-server client', () => {
     await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0))
     controller.abort()
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('uses the configured timeout for stream inference', async () => {
+    vi.useFakeTimers()
+    try {
+      let cancelled = false
+      const body = new ReadableStream<Uint8Array>({ cancel() { cancelled = true } })
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, {
+        status: 200, headers: { 'Content-Type': 'text/event-stream' },
+      })))
+      const pending = streamLlamaInference('alias', {
+        prompt: 'hello', maxOutputTokens: 12, temperature: 0, seed: 42,
+      }, new AbortController().signal, undefined, {
+        baseUrl: 'http://llama.test', apiKey: '', inferenceTimeoutMs: 1800000,
+      })
+      const expectation = expect(pending).rejects.toThrow('llama-server 请求超时')
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(cancelled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1680000)
+      await expectation
+      expect(cancelled).toBe(true)
+      expect(body.locked).toBe(false)
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
   })
 
   it('surfaces an SSE server error', async () => {

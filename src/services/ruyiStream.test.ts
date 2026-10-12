@@ -108,9 +108,11 @@ describe('streamRuyiInference', () => {
     let cancelled = false
     const body = new ReadableStream<Uint8Array>({ cancel() { cancelled = true } })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(body)))
-    const pending = streamRuyiInference('model', params, new AbortController().signal, undefined, config)
+    const pending = streamRuyiInference('model', params, new AbortController().signal, undefined, { ...config, inferenceTimeoutMs: 1800000 })
     const expectation = expect(pending).rejects.toThrow('ruyi-serving 请求超时')
     await vi.advanceTimersByTimeAsync(120_000)
+    expect(cancelled).toBe(false)
+    await vi.advanceTimersByTimeAsync(1680000)
     await expectation
     expect(cancelled).toBe(true)
     expect(body.locked).toBe(false)

@@ -12,6 +12,7 @@ export interface BackendStatus {
 export interface BackendConfig {
   baseUrl: string
   apiKey: string
+  inferenceTimeoutMs?: number
 }
 
 export interface ModelProfile {

@@ -4,6 +4,30 @@ import { createRuyiClient } from './ruyiClient'
 afterEach(() => vi.restoreAllMocks())
 
 describe('ruyi-serving client', () => {
+  it('waits beyond two minutes when configured and aborts at the configured deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      let requestSignal: AbortSignal | undefined
+      vi.stubGlobal('fetch', vi.fn((_url, init: RequestInit) => new Promise((_resolve, reject) => {
+        requestSignal = init.signal as AbortSignal
+        requestSignal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      })))
+      const client = createRuyiClient({ baseUrl: 'http://ruyi.test', apiKey: '', inferenceTimeoutMs: 1800000 })
+      const pending = client.runInference('model', {
+        prompt: 'hello', maxOutputTokens: 12, temperature: 0, seed: 42,
+      }, new AbortController().signal)
+      const expectation = expect(pending).rejects.toThrow('ruyi-serving 请求超时')
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(requestSignal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1680000)
+      await expectation
+      expect(requestSignal?.aborted).toBe(true)
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('keeps the Responses contract and parses model envelopes', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ healthy: true }), { status: 200 }))

@@ -32,13 +32,17 @@ npm run preview
 ```env
 VITE_RUYI_API_BASE_URL=http://127.0.0.1:8000
 VITE_RUYI_API_KEY=
+VITE_RUYI_INFERENCE_TIMEOUT_MS=1800000
 VITE_LLAMA_SERVER_BASE_URL=http://127.0.0.1:8080
 VITE_LLAMA_SERVER_API_KEY=
+VITE_LLAMA_INFERENCE_TIMEOUT_MS=1800000
 VITE_DEFAULT_PROFILE_ID=deepseek-r1-1.5b
 VITE_MODEL_PROFILES_JSON=[{"id":"deepseek-r1-1.5b","name":"DeepSeek R1-Distill-Qwen-1.5B","buddyModelId":"deepseek-r1-buddy","llamaModelId":"deepseek-r1-llama","llamaServerModelId":"deepseek-r1-llama"}]
 ```
 
 旧的 `VITE_API_BASE_URL` 仍可作为 `VITE_RUYI_API_BASE_URL` 的 fallback。`llamaServerModelId` 是可选字段，缺省时使用 `llamaModelId`。
+
+慢速设备可分别设置 `VITE_RUYI_INFERENCE_TIMEOUT_MS` 和 `VITE_LLAMA_INFERENCE_TIMEOUT_MS`，控制 Buddy 与 llama 普通及流式推理的前端等待时间（单位毫秒）。示例值 `1800000` 为 30 分钟；未配置或值无效时为 120000（2 分钟）。健康检查和模型列表仍为 10 秒。修改后重启 `npm run dev` 并刷新页面。后端模型的 `request_timeout_ms` 及代理超时也需足够长；流式请求还受后端空闲超时限制，前端配置不能覆盖这些限制。
 
 每个 profile 必须包含：
 
