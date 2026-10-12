@@ -39,7 +39,7 @@ function backendName(backend: BackendKind): string {
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="metric-row"><dt>{label}</dt><dd>{value}</dd></div>
+  return <div className="metric-row" title={`${label}: ${value}`}><dt>{label}</dt><dd>{value}</dd></div>
 }
 
 function ResultCard({ backend, result, progress, status }: { backend: BackendKind; result: EngineResult | null; progress: EngineStreamUpdate | null; status: EngineStatus }) {
@@ -60,14 +60,14 @@ function ResultCard({ backend, result, progress, status }: { backend: BackendKin
         {output || notice ? <div className="output-content">{notice && <p className="output-notice" role="status">{notice}</p>}{output && <p className="result-text">{output}</p>}</div> : <div className="empty-state"><span className="state-icon">↗</span><p>{status === 'running' ? '正在生成回答…' : '运行后端或对比，结果会显示在这里'}</p></div>}
       </div>
       <dl className="metrics-grid">
-        <Metric label="输入 tokens" value={formatNumber(metrics?.promptTokens ?? null, 0)} />
-        <Metric label="输出 tokens" value={formatNumber(metrics?.completionTokens ?? null, 0)} />
-        <Metric label="总 tokens" value={formatNumber(metrics?.totalTokens ?? null, 0)} />
-        <Metric label="总延迟" value={formatMetric(metrics?.latencyMs ?? null, 'ms', 0)} />
-        <Metric label="首 token" value={formatMetric(metrics?.timeToFirstTokenMs ?? progress?.timeToFirstTokenMs ?? null, 'ms', 0)} />
-        <Metric label="Tokens / s" value={formatMetric(metrics?.tokensPerSecond ?? null, 't/s', 1)} />
+        <Metric label="输入" value={formatNumber(metrics?.promptTokens ?? null, 5)} />
+        <Metric label="输出" value={formatNumber(metrics?.completionTokens ?? null, 5)} />
+        <Metric label="总计" value={formatNumber(metrics?.totalTokens ?? null, 5)} />
+        <Metric label="延迟" value={formatMetric(metrics?.latencyMs ?? null, 'ms', 5)} />
+        <Metric label="首字" value={formatMetric(metrics?.timeToFirstTokenMs ?? progress?.timeToFirstTokenMs ?? null, 'ms', 5)} />
+        <Metric label="速度" value={formatMetric(metrics?.tokensPerSecond ?? null, 't/s', 5)} />
       </dl>
-      <div className="result-card-footer"><span>finish reason</span><strong>{result?.finishReason ?? '—'}</strong>{metrics?.metricsSource === 'frontend' && <em>tokens/s 为前端计算</em>}</div>
+      <div className="result-card-footer"><span>finish reason</span><strong>{result?.finishReason ?? '—'}</strong>{metrics?.metricsSource === 'frontend' && <em>速度为前端计算</em>}</div>
     </article>
   )
 }

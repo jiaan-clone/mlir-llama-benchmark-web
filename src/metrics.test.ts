@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatNumber, safeSpeedup, speedupForResults, validMeasurement, validTokenCount, withWallClockFallback } from './metrics'
+import { formatMetric, formatNumber, safeSpeedup, speedupForResults, validMeasurement, validTokenCount, withWallClockFallback } from './metrics'
 import type { EngineResult } from './types'
 
 describe('benchmark metrics', () => {
@@ -43,5 +43,7 @@ describe('benchmark metrics', () => {
   it('formats unavailable values safely', () => {
     expect(formatNumber(null)).toBe('-')
     expect(formatNumber(12.345, 2)).toBe('12.35')
+    expect(formatNumber(12, 5)).toBe('12.00000')
+    expect(formatMetric(12.345678, 'ms', 5)).toBe('12.34568 ms')
   })
 })
