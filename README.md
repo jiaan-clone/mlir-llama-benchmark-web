@@ -66,9 +66,9 @@ llama-server 使用：
 
 - `GET /health`：检查 llama-server
 - `GET /v1/models`：读取 llama 模型
-- `POST /v1/chat/completions`：OpenAI `messages`、`max_tokens`、`temperature`、`seed`，固定 `stream:false`
+- `POST /v1/chat/completions`：OpenAI `messages`、`max_tokens`、`temperature`、`seed`，`stream` 由页面流式输出开关控制
 
-单次请求使用相同的 Prompt、max tokens、temperature 和 seed，只替换协议与 model ID。“运行对比”的两次请求严格顺序执行，也可通过独立按钮仅运行某一个后端。页面上的“Buddy 流式输出”默认关闭；开启后 Buddy 经 ruyi-serving 使用 `POST /v1/responses`、`stream:true`，运行时可看到增量文本和首个非空文本 delta 的观测时间。llama 页面仍为非流式。要回退，关闭开关并**手动重新运行**；出错或取消后不会自动重发推理请求。
+单次请求使用相同的 Prompt、max tokens、temperature 和 seed，只替换协议与 model ID。“运行对比”的两次请求严格顺序执行，也可通过独立按钮仅运行某一个后端。页面上的“Buddy / llama 流式输出”默认关闭；开启后 Buddy 经 ruyi-serving 使用 `POST /v1/responses`、`stream:true`，llama 使用 `POST /v1/chat/completions`、`stream:true`，运行时可看到两侧的增量文本和首个非空文本 delta 的观测时间。要回退，关闭开关并**手动重新运行**；出错或取消后不会自动重发推理请求。
 
 Responses 流使用 `response.output_text.delta` 的顶层 `delta`；`response.completed`、`response.incomplete`、`response.failed` 是终态，也可能收到 `event: error`。它**没有 `[DONE]`**；终态中的 `response.output` 校准最终文本，`response.usage` 和 `response.ruyi.execution_metrics` 提供有效指标。`incomplete` 仍展示为结果，表示输出被 token 上限等原因截断。
 
@@ -86,7 +86,7 @@ npm run build
 ## 当前限制
 
 - 单页、单用户、单次顺序对比。
-- Buddy 可选流式，llama 页面仍非流式；缺失用量显示不可用。
+- Buddy 与 llama 由同一个页面开关控制是否使用流式输出；缺失用量显示不可用。
 - 不负责模型下载、转换、编译或启动后端进程。
 - tokens/s 取决于各服务是否返回原生 metrics；缺失时页面使用 wall-clock 估算并标记为“前端计算”。
 - API key 会由 Vite 注入前端构建产物，仅适合受信任的本地环境；不应将生产密钥放进公开部署的前端。

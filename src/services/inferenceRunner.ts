@@ -74,7 +74,7 @@ export class InferenceRunner {
     this.active = null
   }
 
-  async run(mode: RunMode, modelIds: ModelIds, request: InferenceRequest, buddyStream: boolean): Promise<void> {
+  async run(mode: RunMode, modelIds: ModelIds, request: InferenceRequest, streamOutput: boolean): Promise<void> {
     if (this.disposed || this.active) return
     const controller = new AbortController()
     this.active = controller
@@ -92,8 +92,10 @@ export class InferenceRunner {
       const startedAt = this.now()
       let settled = false
       try {
-        const stream = backend === 'buddy' && buddyStream ? this.clients.buddy.streamInference : undefined
-        if (stream === undefined && backend === 'buddy' && buddyStream) throw new Error('Buddy 流式客户端不可用。')
+        const stream = streamOutput ? this.clients[backend].streamInference : undefined
+        if (streamOutput && stream === undefined) {
+          throw new Error(`${backend === 'buddy' ? 'Buddy' : 'llama'} 流式客户端不可用。`)
+        }
         const onUpdate = (progress: EngineStreamUpdate) => {
           if (settled || !this.current(controller)) return
           this.update({ progress: { ...this.state.progress, [backend]: progress } })

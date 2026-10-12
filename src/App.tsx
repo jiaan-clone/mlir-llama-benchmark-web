@@ -85,7 +85,7 @@ function App() {
   const [maxOutputTokens, setMaxOutputTokens] = useState(128)
   const [temperature, setTemperature] = useState(0)
   const [seed, setSeed] = useState(42)
-  const [buddyStream, setBuddyStream] = useState(false)
+  const [streamOutput, setStreamOutput] = useState(false)
   const { statuses: backendStatuses, refreshStatus } = useBackendStatus(backendClients)
   const { engineStatuses, results, progress, runState, runMode, run, cancel } = useInferenceRunner(backendClients)
   const [formError, setFormError] = useState('')
@@ -127,7 +127,7 @@ function App() {
       return
     }
     const params: InferenceRequest = { prompt: prompt.trim(), maxOutputTokens, temperature, seed }
-    void run(mode, { buddy: selectedProfile.buddyModelId, llama: resolveLlamaModelId(selectedProfile) }, params, buddyStream)
+    void run(mode, { buddy: selectedProfile.buddyModelId, llama: resolveLlamaModelId(selectedProfile) }, params, streamOutput)
   }
 
   const speedup = runMode === 'comparison' ? speedupForResults(results.buddy, results.llama) : null
@@ -162,7 +162,7 @@ function App() {
               <label className="field"><span>Temperature</span><input id="temperature" type="number" min={0} max={2} step={0.1} value={temperature} onChange={(event) => setTemperature(Math.min(2, Math.max(0, Number(event.target.value) || 0)))} disabled={controlsDisabled} /></label>
               <label className="field"><span>Seed</span><input id="seed" type="number" value={seed} onChange={(event) => setSeed(Number(event.target.value) || 0)} disabled={controlsDisabled} /></label>
             </div>
-            <label className="stream-toggle"><input type="checkbox" checked={buddyStream} onChange={(event) => setBuddyStream(event.target.checked)} disabled={controlsDisabled} /><span>Buddy 流式输出</span></label>
+            <label className="stream-toggle"><input type="checkbox" checked={streamOutput} onChange={(event) => setStreamOutput(event.target.checked)} disabled={controlsDisabled} /><span>Buddy / llama 流式输出</span></label>
           </div>
           {formError && <p className="form-error" role="alert">{formError}</p>}
           <div className="engine-run-actions" aria-label="单独运行后端">

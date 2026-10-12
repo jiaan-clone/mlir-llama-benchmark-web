@@ -14,8 +14,8 @@ export function useInferenceRunner(clients: Record<BackendKind, BackendClient>) 
 
   return {
     ...state,
-    run: (mode: RunMode, modelIds: Record<BackendKind, string>, params: InferenceRequest, buddyStream: boolean) =>
-      runnerRef.current?.run(mode, modelIds, params, buddyStream),
+    run: (mode: RunMode, modelIds: Record<BackendKind, string>, params: InferenceRequest, streamOutput: boolean) =>
+      runnerRef.current?.run(mode, modelIds, params, streamOutput),
     cancel: () => runnerRef.current?.cancel(),
   }
 }
