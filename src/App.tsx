@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { defaultProfileId, llamaServerConfig, modelProfiles, ruyiConfig } from './config'
 import { backendClients } from './services/backendClients'
@@ -47,6 +47,13 @@ function ResultCard({ backend, result, progress, status }: { backend: BackendKin
   const metrics = result?.metrics
   const output = result?.text || progress?.text || ''
   const notice = result?.status === 'error' ? result.error || '后端请求失败' : result?.status === 'cancelled' ? '本次请求已取消' : null
+  const outputPanelRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const panel = outputPanelRef.current
+    if (panel) panel.scrollTop = panel.scrollHeight
+  }, [output])
+
   return (
     <article className={`result-card ${isBuddy ? 'card-buddy' : 'card-llama'}`}>
       <div className="result-card-header">
@@ -56,7 +63,7 @@ function ResultCard({ backend, result, progress, status }: { backend: BackendKin
         </div>
         <span className={statusClass(status)}>{statusLabel(status)}</span>
       </div>
-      <div className="output-panel" aria-live="polite">
+      <div ref={outputPanelRef} className="output-panel" aria-live="polite">
         {output || notice ? <div className="output-content">{notice && <p className="output-notice" role="status">{notice}</p>}{output && <p className="result-text">{output}</p>}</div> : <div className="empty-state"><span className="state-icon">↗</span><p>{status === 'running' ? '正在生成回答…' : '运行后端或对比，结果会显示在这里'}</p></div>}
       </div>
       <dl className="metrics-grid">
