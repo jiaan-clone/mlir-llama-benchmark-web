@@ -46,18 +46,30 @@ describe('inference runner state coordination', () => {
     expect(runner.state.runState).toBe('completed')
   })
 
-  it('publishes progress without success and starts llama only after Buddy terminal', async () => {
+  it('starts both comparison backends together and publishes their progress independently', async () => {
     const { runner, clients, buddy, llama, buddyProgress, llamaProgress } = setup()
     const input = { ...params }
     const models = { ...ids }
     const pending = runner.run('comparison', models, input, true)
     input.prompt = 'modified'; models.buddy = 'changed'
+    await vi.waitFor(() => {
+      expect(clients.buddy.streamInference).toHaveBeenCalledTimes(1)
+      expect(clients.llama.streamInference).toHaveBeenCalledTimes(1)
+    })
     buddyProgress('partial')
-    expect(runner.state).toMatchObject({ runState: 'running', progress: { buddy: { text: 'partial', timeToFirstTokenMs: 12 } }, results: { buddy: null } })
+    llamaProgress('llama partial')
+    expect(runner.state).toMatchObject({
+      runState: 'running',
+      progress: {
+        buddy: { text: 'partial', timeToFirstTokenMs: 12 },
+        llama: { text: 'llama partial', timeToFirstTokenMs: 12 },
+      },
+      results: { buddy: null, llama: null },
+      engineStatuses: { buddy: 'running', llama: 'running' },
+    })
     expect(clients.llama.runInference).not.toHaveBeenCalled()
-    expect(clients.llama.streamInference).not.toHaveBeenCalled()
     buddy.resolve(success('buddy'))
-    await vi.waitFor(() => expect(clients.llama.streamInference).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(runner.state.engineStatuses).toMatchObject({ buddy: 'success', llama: 'running' }))
     buddyProgress('too late')
     expect(runner.state.progress.buddy).toBeNull()
     expect(clients.buddy.streamInference.mock.calls[0][0]).toBe('b')
@@ -65,7 +77,6 @@ describe('inference runner state coordination', () => {
     expect(clients.llama.streamInference.mock.calls[0][0]).toBe('l')
     expect(clients.llama.streamInference.mock.calls[0][1]).toMatchObject({ prompt: 'hi' })
     expect(clients.llama.runInference).not.toHaveBeenCalled()
-    llamaProgress('llama partial')
     expect(runner.state.progress.llama).toMatchObject({ text: 'llama partial' })
     llama.resolve(success('llama'))
     await pending
@@ -73,29 +84,44 @@ describe('inference runner state coordination', () => {
     expect(speedupForResults(runner.state.results.buddy, runner.state.results.llama)).toBe(2)
   })
 
-  it('retains partial text after cancellation, prevents second request and ignores stale callbacks after restart', async () => {
-    const { runner, clients, buddy, buddyProgress } = setup()
+  it('cancels both comparison requests, retains partial text, and ignores stale callbacks after restart', async () => {
+    const { runner, clients, buddy, llama, buddyProgress, llamaProgress } = setup()
     const old = runner.run('comparison', ids, params, true)
+    await vi.waitFor(() => {
+      expect(clients.buddy.streamInference).toHaveBeenCalledTimes(1)
+      expect(clients.llama.streamInference).toHaveBeenCalledTimes(1)
+    })
     buddyProgress('partial')
+    llamaProgress('llama partial')
     runner.cancel()
-    expect(runner.state).toMatchObject({ runState: 'cancelled', results: { buddy: { status: 'cancelled', text: 'partial' }, llama: null }, engineStatuses: { llama: 'idle' } })
+    expect(runner.state).toMatchObject({
+      runState: 'cancelled',
+      results: {
+        buddy: { status: 'cancelled', text: 'partial' },
+        llama: { status: 'cancelled', text: 'llama partial' },
+      },
+      engineStatuses: { buddy: 'cancelled', llama: 'cancelled' },
+    })
     expect(speedupForResults(runner.state.results.buddy, success('llama'))).toBeNull()
+    buddy.reject(new DOMException('aborted', 'AbortError'))
+    llama.reject(new DOMException('aborted', 'AbortError'))
+    await old
     const fresh = runner.run('buddy', ids, params, false)
     await fresh
     buddyProgress('late')
-    buddy.resolve(success('buddy'))
-    await old
+    llamaProgress('late')
     expect(runner.state).toMatchObject({ runState: 'completed', results: { buddy: { text: 'final' } } })
     expect(clients.llama.runInference).not.toHaveBeenCalled()
   })
 
-  it('handles stream failure with retained output and still tries llama; disposal stops updates', async () => {
+  it('lets the other backend finish after one stream fails; disposal stops updates', async () => {
     const { runner, buddy, llama, buddyProgress, states } = setup()
     const pending = runner.run('comparison', ids, params, true)
     buddyProgress('partial')
     buddy.reject(new Error('stream broken'))
-    await vi.waitFor(() => expect(runner.state.engineStatuses.llama).toBe('running'))
+    await vi.waitFor(() => expect(runner.state.results.buddy?.status).toBe('error'))
     expect(runner.state.results.buddy).toMatchObject({ text: 'partial', status: 'error', error: 'stream broken' })
+    expect(runner.state.engineStatuses.llama).toBe('running')
     llama.resolve(success('llama'))
     await pending
     expect(runner.state.runState).toBe('completed')

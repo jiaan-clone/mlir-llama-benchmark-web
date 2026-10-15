@@ -82,11 +82,19 @@ export class InferenceRunner {
     const params = { ...request }
     const initial = mode === 'comparison' ? initialRunnerState() : this.state
     const first = mode === 'llama' ? 'llama' : 'buddy'
-    this.update({ runMode: mode, runState: 'running',
-      results: { ...initial.results, [first]: null },
-      progress: { ...initial.progress, [first]: null },
-      engineStatuses: { ...initial.engineStatuses, [first]: 'running' },
-    })
+    if (mode === 'comparison') {
+      this.update({ runMode: mode, runState: 'running',
+        results: { buddy: null, llama: null },
+        progress: { buddy: null, llama: null },
+        engineStatuses: { buddy: 'running', llama: 'running' },
+      })
+    } else {
+      this.update({ runMode: mode, runState: 'running',
+        results: { ...initial.results, [first]: null },
+        progress: { ...initial.progress, [first]: null },
+        engineStatuses: { ...initial.engineStatuses, [first]: 'running' },
+      })
+    }
 
     const execute = async (backend: BackendKind): Promise<EngineResult> => {
       const startedAt = this.now()
@@ -128,14 +136,12 @@ export class InferenceRunner {
     }
 
     try {
-      const firstResult = await execute(first)
-      if (!this.current(controller)) return
       if (mode === 'comparison') {
-        this.update({ engineStatuses: { ...this.state.engineStatuses, llama: 'running' } })
-        const secondResult = await execute('llama')
-        if (this.current(controller)) this.update({ runState: firstResult.status === 'error' && secondResult.status === 'error' ? 'failed' : 'completed' })
+        const [buddyResult, llamaResult] = await Promise.all([execute('buddy'), execute('llama')])
+        if (this.current(controller)) this.update({ runState: buddyResult.status === 'error' && llamaResult.status === 'error' ? 'failed' : 'completed' })
       } else {
-        this.update({ runState: firstResult.status === 'error' ? 'failed' : 'completed' })
+        const result = await execute(first)
+        if (this.current(controller)) this.update({ runState: result.status === 'error' ? 'failed' : 'completed' })
       }
     } catch (error) {
       if (this.current(controller)) {

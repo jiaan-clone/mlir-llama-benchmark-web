@@ -67,12 +67,12 @@ function ResultCard({ backend, result, progress, status }: { backend: BackendKin
         {output || notice ? <div className="output-content">{notice && <p className="output-notice" role="status">{notice}</p>}{output && <p className="result-text">{output}</p>}</div> : <div className="empty-state"><span className="state-icon">↗</span><p>{status === 'running' ? '正在生成回答…' : '运行后端或对比，结果会显示在这里'}</p></div>}
       </div>
       <dl className="metrics-grid">
-        <Metric label="输入" value={formatNumber(metrics?.promptTokens ?? null, 5)} />
-        <Metric label="输出" value={formatNumber(metrics?.completionTokens ?? null, 5)} />
-        <Metric label="总计" value={formatNumber(metrics?.totalTokens ?? null, 5)} />
-        <Metric label="延迟" value={formatMetric(metrics?.latencyMs ?? null, 'ms', 5)} />
-        <Metric label="首字" value={formatMetric(metrics?.timeToFirstTokenMs ?? progress?.timeToFirstTokenMs ?? null, 'ms', 5)} />
-        <Metric label="速度" value={formatMetric(metrics?.tokensPerSecond ?? null, 't/s', 5)} />
+        <Metric label="输入" value={formatNumber(metrics?.promptTokens ?? null, 2)} />
+        <Metric label="输出" value={formatNumber(metrics?.completionTokens ?? null, 2)} />
+        <Metric label="总计" value={formatNumber(metrics?.totalTokens ?? null, 2)} />
+        <Metric label="延迟" value={formatMetric(metrics?.latencyMs ?? null, 'ms', 2)} />
+        <Metric label="首字" value={formatMetric(metrics?.timeToFirstTokenMs ?? progress?.timeToFirstTokenMs ?? null, 'ms', 2)} />
+        <Metric label="速度" value={formatMetric(metrics?.tokensPerSecond ?? null, 't/s', 2)} />
       </dl>
       <div className="result-card-footer"><span>finish reason</span><strong>{result?.finishReason ?? '—'}</strong>{metrics?.metricsSource === 'frontend' && <em>速度为前端计算</em>}</div>
     </article>
@@ -140,7 +140,7 @@ function App() {
   const speedup = runMode === 'comparison' ? speedupForResults(results.buddy, results.llama) : null
   const hasResults = results.buddy !== null || results.llama !== null
   const summaryText = speedup === null ? '完成两侧推理后，这里会显示速度倍率。' : speedup >= 1 ? `Buddy-MLIR 快 ${formatNumber(speedup, 2)}x` : `llama.cpp 快 ${formatNumber(1 / speedup, 2)}x`
-  const modeLabel = runMode === 'comparison' ? 'SEQUENTIAL' : runMode === 'buddy' ? 'BUDDY ONLY' : 'LLAMA ONLY'
+  const modeLabel = runMode === 'comparison' ? 'PARALLEL' : runMode === 'buddy' ? 'BUDDY ONLY' : 'LLAMA ONLY'
   const nextThemeLabel = theme === 'light' ? '切换到黑夜模式' : '切换到白天模式'
   const controlsDisabled = runState === 'running'
   const statusChecking = backendStatuses.buddy.healthStatus === 'checking' || backendStatuses.llama.healthStatus === 'checking'

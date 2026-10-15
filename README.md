@@ -1,6 +1,6 @@
 # Buddy-MLIR vs llama.cpp Performance Lab
 
-这是一个面向本地推理的前端 MVP，可用同一组 Prompt 和采样参数单独请求 Buddy-MLIR 或 llama.cpp，也可顺序请求两者进行对比，并排展示真实输出和 tokens/s、延迟、Token 用量等指标。
+这是一个面向本地推理的前端 MVP，可用同一组 Prompt 和采样参数单独请求 Buddy-MLIR 或 llama.cpp，也可并发请求两者进行对比，并排展示真实输出和 tokens/s、延迟、Token 用量等指标。
 
 浏览器通过两条独立链路访问后端：Buddy-MLIR 仍由 `ruyi-serving` 管理；llama.cpp 由独立的 `llama-server` 提供 OpenAI 兼容接口。前端不会执行本地命令。
 
@@ -68,7 +68,7 @@ llama-server 使用：
 - `GET /v1/models`：读取 llama 模型
 - `POST /v1/chat/completions`：OpenAI `messages`、`max_tokens`、`temperature`、`seed`，`stream` 由页面流式输出开关控制
 
-单次请求使用相同的 Prompt、max tokens、temperature 和 seed，只替换协议与 model ID。“运行对比”的两次请求严格顺序执行，也可通过独立按钮仅运行某一个后端。页面上的“Buddy / llama 流式输出”默认关闭；开启后 Buddy 经 ruyi-serving 使用 `POST /v1/responses`、`stream:true`，llama 使用 `POST /v1/chat/completions`、`stream:true`，运行时可看到两侧的增量文本和首个非空文本 delta 的观测时间。要回退，关闭开关并**手动重新运行**；出错或取消后不会自动重发推理请求。
+单次请求使用相同的 Prompt、max tokens、temperature 和 seed，只替换协议与 model ID。“运行对比”会同时发起两侧请求，也可通过独立按钮仅运行某一个后端。页面上的“Buddy / llama 流式输出”默认关闭；开启后 Buddy 经 ruyi-serving 使用 `POST /v1/responses`、`stream:true`，llama 使用 `POST /v1/chat/completions`、`stream:true`，运行时可看到两侧的增量文本和首个非空文本 delta 的观测时间。要回退，关闭开关并**手动重新运行**；一侧出错不会中止另一侧，取消则会同时中止两侧请求，且不会自动重发推理请求。
 
 Responses 流使用 `response.output_text.delta` 的顶层 `delta`；`response.completed`、`response.incomplete`、`response.failed` 是终态，也可能收到 `event: error`。它**没有 `[DONE]`**；终态中的 `response.output` 校准最终文本，`response.usage` 和 `response.ruyi.execution_metrics` 提供有效指标。`incomplete` 仍展示为结果，表示输出被 token 上限等原因截断。
 
@@ -85,7 +85,7 @@ npm run build
 
 ## 当前限制
 
-- 单页、单用户、单次顺序对比。
+- 单页、单用户、单次并发对比。
 - Buddy 与 llama 由同一个页面开关控制是否使用流式输出；缺失用量显示不可用。
 - 不负责模型下载、转换、编译或启动后端进程。
 - tokens/s 取决于各服务是否返回原生 metrics；缺失时页面使用 wall-clock 估算并标记为“前端计算”。

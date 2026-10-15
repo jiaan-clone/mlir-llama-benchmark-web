@@ -3,7 +3,7 @@
 本文说明如何将 `mlir-llama-benchmark-web` 的 Buddy-MLIR 链路接入本机的
 `/path/to/ruyi-serving`。llama.cpp 现在由独立的 llama-server 直连，见
 [`llama-direct-integration.md`](llama-direct-integration.md)；前端仍可用同一个
-Prompt 顺序运行两侧。
+Prompt 并发运行两侧。
 
 ## 1. 运行架构
 
@@ -395,7 +395,7 @@ http://10.30.175.2:5173
 2. ruyi `/v1/models` 中 Buddy 模型存在，llama `/v1/models` 请按直连指南检查；
 3. 02 profile 显示 DeepSeek R1；
 4. “运行对比”按钮可用；
-5. 03 区域先出现 Buddy-MLIR，再出现 llama.cpp 的结果；
+5. 03 区域同时运行 Buddy-MLIR 与 llama.cpp，并独立显示两侧结果；
 6. 两侧均显示输出 Token、总延迟和 Tokens/s。
 
 ## 7. 当前前端的兼容性注意事项
@@ -503,5 +503,5 @@ test -f /path/to/models/deepseek-r1/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf
 - 不要把生产 API Key 写入公开前端构建产物；
 - 对比时固定 Prompt、`max_output_tokens`、temperature、seed、模型精度和硬件；
 - 第一次请求包含模型加载成本，正式比较前应先预热两侧；
-- 两次请求当前由前端严格顺序执行，不代表并发吞吐；
+- “运行对比”会并发发起两侧请求，结果可能受到共享 CPU、内存和网络资源竞争影响；
 - 没有后端原生 Tokens/s 时，页面的 fallback 是前端 wall-clock 估算值。
