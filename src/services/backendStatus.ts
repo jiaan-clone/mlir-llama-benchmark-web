@@ -25,16 +25,16 @@ export async function loadBackendStatus(client: BackendClient, backendLabel: str
     next.healthStatus = healthy ? 'ready' : 'unavailable'
     const statusMessage = typeof healthResult.value.status_message === 'string' ? healthResult.value.status_message : ''
     const message = typeof healthResult.value.message === 'string' ? healthResult.value.message : ''
-    next.healthError = healthy ? '' : statusMessage || message || `${backendLabel} 服务未就绪。`
+    next.healthError = healthy ? '' : statusMessage || message || `${backendLabel} service is not ready.`
   } else {
     next.healthStatus = 'unavailable'
-    next.healthError = healthResult.reason instanceof Error ? healthResult.reason.message : `${backendLabel} 健康检查失败。`
+    next.healthError = healthResult.reason instanceof Error ? healthResult.reason.message : `${backendLabel} health check failed.`
   }
   if (modelsResult.status === 'fulfilled') {
     next.models = new Set(modelsResult.value.map((model) => model.id))
     next.modelsLoaded = true
   } else {
-    next.modelsError = modelsResult.reason instanceof Error ? modelsResult.reason.message : `${backendLabel} 模型列表读取失败。`
+    next.modelsError = modelsResult.reason instanceof Error ? modelsResult.reason.message : `Failed to load the ${backendLabel} model list.`
   }
   return next
 }

@@ -44,7 +44,7 @@ export async function streamRuyiInference(
   try {
     if (!/^text\/event-stream(?:\s*;|\s*$)/i.test(stream.response.headers.get('Content-Type') ?? '')) {
       await stream.response.body?.cancel()
-      throw new Error('ruyi-serving 返回的不是 text/event-stream。')
+      throw new Error('ruyi-serving did not return text/event-stream.')
     }
     const aggregator = new RuyiStreamAggregator(modelId)
     let firstTextMs: number | null = null
@@ -57,10 +57,10 @@ export async function streamRuyiInference(
       return aggregator.consume(event, onUpdate, firstTextMs) !== null
     })
     if (signal.aborted || stream.signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
-    if (!aggregator.result) throw new Error('ruyi-serving 响应流中断：未收到终止事件。')
+    if (!aggregator.result) throw new Error('ruyi-serving response stream interrupted: missing terminal event.')
     return withWallClockFallback(aggregator.result, now() - startedAt, firstTextMs)
   } catch (error) {
-    if (stream.didTimeout()) throw withServiceError(new HttpClientError('请求超时。', 'timeout'), 'ruyi-serving')
+    if (stream.didTimeout()) throw withServiceError(new HttpClientError('Request timed out.', 'timeout'), 'ruyi-serving')
     throw withServiceError(error, 'ruyi-serving')
   } finally {
     stream.cleanup()

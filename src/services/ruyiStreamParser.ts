@@ -18,12 +18,12 @@ function record(value: unknown): RecordValue | null {
 function errorMessage(value: unknown): string {
   if (typeof value === 'string' && value.trim()) return value
   const message = record(value)?.message
-  return typeof message === 'string' && message.trim() ? message : 'ruyi-serving 流式响应失败。'
+  return typeof message === 'string' && message.trim() ? message : 'ruyi-serving streaming response failed.'
 }
 
 function index(value: unknown, name: string): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-    throw new Error(`ruyi-serving SSE ${name} 无效。`)
+    throw new Error(`Invalid ruyi-serving SSE ${name}.`)
   }
   return value
 }
@@ -35,13 +35,13 @@ export function parseRuyiStreamEvent(frame: SseEvent): RuyiStreamEvent | null {
   let decoded: unknown
   try { decoded = JSON.parse(frame.data) as unknown } catch {
     if (!known) return null
-    throw new Error('ruyi-serving SSE JSON 无效。')
+    throw new Error('Invalid ruyi-serving SSE JSON.')
   }
   const payload = record(decoded)
   if (!known && !payload) return null
-  if (!payload) throw new Error('ruyi-serving SSE 事件必须为对象。')
-  if (payload.type !== undefined && typeof payload.type !== 'string') throw new Error('ruyi-serving SSE type 无效。')
-  if (frame.event && payload.type && frame.event !== payload.type) throw new Error('ruyi-serving SSE event 与 type 不一致。')
+  if (!payload) throw new Error('ruyi-serving SSE event must be an object.')
+  if (payload.type !== undefined && typeof payload.type !== 'string') throw new Error('Invalid ruyi-serving SSE type.')
+  if (frame.event && payload.type && frame.event !== payload.type) throw new Error('ruyi-serving SSE event does not match type.')
   if (!known) return null
   const type = frame.event ?? payload.type
   if (type === 'error' || (payload.error !== undefined && !['response.completed', 'response.incomplete', 'response.failed'].includes(type ?? ''))) {
@@ -50,13 +50,13 @@ export function parseRuyiStreamEvent(frame: SseEvent): RuyiStreamEvent | null {
   if (type === 'response.created' || type === 'response.in_progress') return { kind: type }
   if (type === 'response.output_text.delta' || type === 'response.output_text.done') {
     const field = type === 'response.output_text.delta' ? 'delta' : 'text'
-    if (typeof payload[field] !== 'string') throw new Error(`ruyi-serving SSE ${field} 无效。`)
+    if (typeof payload[field] !== 'string') throw new Error(`Invalid ruyi-serving SSE ${field}.`)
     return { kind: type, text: payload[field], outputIndex: index(payload.output_index, 'output_index'), contentIndex: index(payload.content_index, 'content_index') }
   }
   if (type === 'response.completed' || type === 'response.incomplete' || type === 'response.failed') {
     const response = record(payload.response)
-    if (!response) throw new Error('ruyi-serving SSE 终止事件缺少 response。')
-    if (response.status !== type.slice('response.'.length)) throw new Error('ruyi-serving SSE 终态与 response.status 不一致。')
+    if (!response) throw new Error('ruyi-serving SSE terminal event is missing response.')
+    if (response.status !== type.slice('response.'.length)) throw new Error('ruyi-serving SSE terminal state does not match response.status.')
     return { kind: type, response }
   }
   return null

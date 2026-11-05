@@ -102,7 +102,7 @@ export class InferenceRunner {
       try {
         const stream = streamOutput ? this.clients[backend].streamInference : undefined
         if (streamOutput && stream === undefined) {
-          throw new Error(`${backend === 'buddy' ? 'Buddy' : 'llama'} 流式客户端不可用。`)
+          throw new Error(`${backend === 'buddy' ? 'Buddy' : 'llama'} streaming client is unavailable.`)
         }
         const onUpdate = (progress: EngineStreamUpdate) => {
           if (settled || !this.current(controller)) return
@@ -126,7 +126,7 @@ export class InferenceRunner {
         if (!this.current(controller) || isAbortError(error)) throw error
         const progress = this.state.progress[backend]
         const failed: EngineResult = { backend, modelId: modelIds[backend], text: progress?.text ?? '', status: 'error',
-          finishReason: null, error: error instanceof Error ? error.message : '未知后端错误。',
+          finishReason: null, error: error instanceof Error ? error.message : 'Unknown backend error.',
           metrics: { ...emptyMetrics(), timeToFirstTokenMs: progress?.timeToFirstTokenMs ?? null } }
         this.update({ results: { ...this.state.results, [backend]: failed },
           progress: { ...this.state.progress, [backend]: null },

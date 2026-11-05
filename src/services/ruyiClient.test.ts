@@ -16,7 +16,7 @@ describe('ruyi-serving client', () => {
       const pending = client.runInference('model', {
         prompt: 'hello', maxOutputTokens: 12, temperature: 0, seed: 42,
       }, new AbortController().signal)
-      const expectation = expect(pending).rejects.toThrow('ruyi-serving 请求超时')
+      const expectation = expect(pending).rejects.toThrow('ruyi-serving request timed out')
       await vi.advanceTimersByTimeAsync(120000)
       expect(requestSignal?.aborted).toBe(false)
       await vi.advanceTimersByTimeAsync(1680000)
@@ -53,6 +53,6 @@ describe('ruyi-serving client', () => {
   it('adds the service name to network errors', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')))
     await expect(createRuyiClient({ baseUrl: 'http://ruyi.test', apiKey: '' }).getHealth())
-      .rejects.toThrow('无法连接 ruyi-serving')
+      .rejects.toThrow('Cannot connect to ruyi-serving')
   })
 })

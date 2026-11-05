@@ -6,7 +6,7 @@ export async function readSseStream(
   signal: AbortSignal,
   consume: (event: SseEvent) => boolean | void,
 ): Promise<void> {
-  if (!response.body) throw new Error('未返回可读取的响应流。')
+  if (!response.body) throw new Error('No readable response stream was returned.')
   const reader = response.body.getReader()
   const parser = new NamedSseEventParser()
   const decoder = new TextDecoder()

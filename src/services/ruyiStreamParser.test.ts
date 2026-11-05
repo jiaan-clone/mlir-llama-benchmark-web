@@ -19,16 +19,16 @@ describe('Responses event contract', () => {
     expect(parseRuyiStreamEvent(frame('response.in_progress', {}, false))).toEqual({ kind: 'response.in_progress' })
     expect(parseRuyiStreamEvent(frame('response.output_item.added'))).toBeNull()
     expect(parseRuyiStreamEvent({ event: 'future.event', data: 'not JSON' })).toBeNull()
-    expect(() => parseRuyiStreamEvent({ event: 'future.event', data: '{"type":"response.completed"}' })).toThrow('不一致')
+    expect(() => parseRuyiStreamEvent({ event: 'future.event', data: '{"type":"response.completed"}' })).toThrow('does not match')
   })
 
   it('rejects conflicting names, malformed JSON and known damaged fields', () => {
     expect(() => parseRuyiStreamEvent({ event: 'response.created', data: '{' })).toThrow('JSON')
-    expect(() => parseRuyiStreamEvent({ event: 'response.created', data: '{"type":"response.completed"}' })).toThrow('不一致')
+    expect(() => parseRuyiStreamEvent({ event: 'response.created', data: '{"type":"response.completed"}' })).toThrow('does not match')
     expect(() => parseRuyiStreamEvent(text('delta', 12))).toThrow('delta')
     expect(() => parseRuyiStreamEvent(text('delta', 'hello', -1))).toThrow('output_index')
-    expect(() => parseRuyiStreamEvent(frame('response.completed'))).toThrow('缺少 response')
-    expect(() => parseRuyiStreamEvent(frame('response.completed', { response: { status: 'failed' } }))).toThrow('不一致')
+    expect(() => parseRuyiStreamEvent(frame('response.completed'))).toThrow('missing response')
+    expect(() => parseRuyiStreamEvent(frame('response.completed', { response: { status: 'failed' } }))).toThrow('does not match')
   })
 
   it('aggregates separate parts, calibrates done and final output without duplication', () => {

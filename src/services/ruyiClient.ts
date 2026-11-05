@@ -9,7 +9,7 @@ const serviceName = 'ruyi-serving'
 export function parseRuyiModels(payload: unknown): ModelInfo[] {
   const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : null
   const source = Array.isArray(payload) ? payload : Array.isArray(root?.data) ? root.data : Array.isArray(root?.models) ? root.models : null
-  if (!source) throw new Error('ruyi-serving 模型列表响应格式无法识别。')
+  if (!source) throw new Error('Unrecognized ruyi-serving model list response format.')
   return source.flatMap((item): ModelInfo[] => {
     if (!item || typeof item !== 'object') return []
     const value = item as Record<string, unknown>

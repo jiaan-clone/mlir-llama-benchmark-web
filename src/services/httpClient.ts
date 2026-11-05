@@ -34,12 +34,12 @@ export function isAbortError(error: unknown): error is DOMException {
 export function withServiceError(error: unknown, serviceName: string): Error {
   if (isAbortError(error)) return error
   if (error instanceof HttpClientError) {
-    if (error.kind === 'network') return new Error(`无法连接 ${serviceName}，请确认服务已启动。`)
-    if (error.kind === 'timeout') return new Error(`${serviceName} 请求超时，请确认服务仍在运行或检查后端日志。`)
+    if (error.kind === 'network') return new Error(`Cannot connect to ${serviceName}. Make sure the service is running.`)
+    if (error.kind === 'timeout') return new Error(`${serviceName} request timed out. Check the service status or backend logs.`)
     if (error.kind === 'abort') return new DOMException('The operation was aborted.', 'AbortError')
-    if (error.kind === 'http') return new Error(`${serviceName} 请求失败：${error.message}`)
+    if (error.kind === 'http') return new Error(`${serviceName} request failed: ${error.message}`)
   }
-  return error instanceof Error ? error : new Error('后端请求失败。')
+  return error instanceof Error ? error : new Error('Backend request failed.')
 }
 
 function parsePayload(text: string): unknown {
@@ -63,7 +63,7 @@ function extractErrorMessage(payload: unknown, status: number): string {
     if (typeof value.message === 'string' && value.message.trim()) return value.message
   }
   if (typeof payload === 'string' && payload.trim()) return payload
-  return `请求失败（HTTP ${status}）`
+  return `Request failed (HTTP ${status}).`
 }
 
 /** Fetch JSON or text with shared auth, timeout, cancellation and error semantics. */
@@ -101,12 +101,12 @@ export async function requestJson<T = unknown>({
       throw new DOMException('The operation was aborted.', 'AbortError')
     }
     if (timedOut) {
-      throw new HttpClientError('请求超时，请确认服务仍在运行或检查后端日志。', 'timeout')
+      throw new HttpClientError('Request timed out. Check the service status or backend logs.', 'timeout')
     }
     if (isAbortError(error)) {
-      throw new HttpClientError('请求已取消。', 'abort')
+      throw new HttpClientError('Request cancelled.', 'abort')
     }
-    throw new HttpClientError('无法连接后端服务，请确认服务已启动。', 'network')
+    throw new HttpClientError('Cannot connect to the backend. Make sure the service is running.', 'network')
   } finally {
     globalThis.clearTimeout(timeoutId)
     parentSignal?.removeEventListener('abort', onParentAbort)
@@ -163,9 +163,9 @@ export async function requestStream({
   } catch (error) {
     cleanup()
     if (parentSignal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
-    if (timedOut) throw new HttpClientError('请求超时，请确认服务仍在运行或检查后端日志。', 'timeout')
-    if (isAbortError(error)) throw new HttpClientError('请求已取消。', 'abort')
-    throw new HttpClientError('无法连接后端服务，请确认服务已启动。', 'network')
+    if (timedOut) throw new HttpClientError('Request timed out. Check the service status or backend logs.', 'timeout')
+    if (isAbortError(error)) throw new HttpClientError('Request cancelled.', 'abort')
+    throw new HttpClientError('Cannot connect to the backend. Make sure the service is running.', 'network')
   }
 
   if (!response.ok) {
@@ -175,7 +175,7 @@ export async function requestStream({
     } catch (error) {
       if (error instanceof HttpClientError) throw error
       if (parentSignal?.aborted) throw new DOMException('The operation was aborted.', 'AbortError')
-      if (timedOut) throw new HttpClientError('请求超时。', 'timeout')
+      if (timedOut) throw new HttpClientError('Request timed out.', 'timeout')
       throw error
     } finally {
       cleanup()

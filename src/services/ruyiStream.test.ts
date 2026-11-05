@@ -62,7 +62,7 @@ describe('streamRuyiInference', () => {
   })
 
   it.each([
-    ['no terminal', delta('a'), '未收到终止事件'],
+    ['no terminal', delta('a'), 'missing terminal event'],
     ['malformed', 'event: response.output_text.delta\ndata: {broken}\n\n', 'JSON'],
     ['error', sse('error', { error: { message: 'compute offline' }, sequence_number: 0 }), 'compute offline'],
     ['failed', complete('failed', { error: { message: 'backend failed' } }), 'backend failed'],
@@ -109,7 +109,7 @@ describe('streamRuyiInference', () => {
     const body = new ReadableStream<Uint8Array>({ cancel() { cancelled = true } })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(body)))
     const pending = streamRuyiInference('model', params, new AbortController().signal, undefined, { ...config, inferenceTimeoutMs: 1800000 })
-    const expectation = expect(pending).rejects.toThrow('ruyi-serving 请求超时')
+    const expectation = expect(pending).rejects.toThrow('ruyi-serving request timed out')
     await vi.advanceTimersByTimeAsync(120_000)
     expect(cancelled).toBe(false)
     await vi.advanceTimersByTimeAsync(1680000)

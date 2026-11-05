@@ -26,13 +26,13 @@ export function parseLlamaSseEvent(data: string): ParsedLlamaSseEvent | null {
   try {
     payload = JSON.parse(data) as unknown
   } catch {
-    throw new Error('llama-server SSE JSON 无效。')
+    throw new Error('Invalid llama-server SSE JSON.')
   }
   const root = asRecord(payload)
   if (!root) return null
   if (root.error !== undefined) {
     const message = typeof root.error === 'string' ? root.error : asRecord(root.error)?.message
-    throw new Error(typeof message === 'string' && message.trim() ? message : 'llama-server 流式响应失败。')
+    throw new Error(typeof message === 'string' && message.trim() ? message : 'llama-server streaming response failed.')
   }
   const choices = Array.isArray(root.choices) ? root.choices : []
   const choice = asRecord(choices[0])

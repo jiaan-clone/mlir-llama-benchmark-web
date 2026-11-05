@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import logo from './assets/ruyiai-logo.png'
 import { defaultProfileId, llamaServerConfig, modelProfiles, ruyiConfig } from './config'
 import { backendClients } from './services/backendClients'
 import { availabilityFor, modelIsReady } from './services/backendStatus'
@@ -10,28 +11,43 @@ import { formatMetric, formatNumber, speedupForResults } from './metrics'
 import type { EngineStatus } from './services/inferenceRunner'
 import type { BackendAvailability, BackendKind, EngineResult, EngineStreamUpdate, InferenceRequest, ModelProfile } from './types'
 
-type Availability = BackendAvailability
 type Theme = 'light' | 'dark'
+type IconName = 'activity' | 'settings' | 'play' | 'stop' | 'refresh' | 'sun' | 'moon' | 'message' | 'compare' | 'info'
 const themeStorageKey = 'performance-lab-theme'
 
+function Icon({ name, className = '' }: { name: IconName; className?: string }) {
+  const paths = {
+    activity: <path d="M3 12h4l3-8 4 16 3-8h4" />,
+    settings: <><path d="M4 7h7m4 0h5M4 17h3m4 0h9" /><circle cx="13" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></>,
+    play: <path d="m9 5 11 7-11 7V5Z" />,
+    stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
+    refresh: <><path d="M20 7v5h-5M4 17v-5h5" /><path d="M6 7a7 7 0 0 1 12-1l2 2M4 16l2 2a7 7 0 0 0 12-1" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></>,
+    moon: <path d="M20 14a8 8 0 0 1-10-10 8.5 8.5 0 1 0 10 10Z" />,
+    message: <path d="M20 15a3 3 0 0 1-3 3H9l-5 3V6a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v9ZM8 8h8M8 12h5" />,
+    compare: <path d="M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4" />,
+    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></>,
+  }
+  return <svg className={`icon ${className}`} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
+}
+
 function getInitialTheme(): Theme {
-  if (typeof window === 'undefined') return 'light'
   try {
     const savedTheme = window.localStorage.getItem(themeStorageKey)
     if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme
   } catch {
-    // Local storage can be unavailable in privacy-restricted browsers.
+    // The default platform theme also works when local storage is unavailable.
   }
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return 'light'
 }
 
 function statusLabel(status: string): string {
-  const labels: Record<string, string> = { checking: '检查中', ready: '就绪', unavailable: '不可用', running: '运行中', idle: '待运行', success: '已完成', completed: '已完成', failed: '失败', error: '失败', cancelled: '已取消' }
+  const labels: Record<string, string> = { checking: 'Checking', ready: 'Ready', unavailable: 'Unavailable', running: 'Running', idle: 'Idle', success: 'Completed', completed: 'Completed', failed: 'Failed', error: 'Failed', cancelled: 'Cancelled' }
   return labels[status] ?? status
 }
 
-function statusClass(status: Availability | EngineStatus): string {
-  return `status-pill status-${status}`
+function StatusBadge({ status }: { status: string }) {
+  return <span className={`status-pill status-${status}`}>{statusLabel(status)}</span>
 }
 
 function backendName(backend: BackendKind): string {
@@ -46,7 +62,7 @@ function ResultCard({ backend, result, progress, status }: { backend: BackendKin
   const isBuddy = backend === 'buddy'
   const metrics = result?.metrics
   const output = result?.text || progress?.text || ''
-  const notice = result?.status === 'error' ? result.error || '后端请求失败' : result?.status === 'cancelled' ? '本次请求已取消' : null
+  const notice = result?.status === 'error' ? result.error || 'Backend request failed.' : result?.status === 'cancelled' ? 'This run was cancelled.' : null
   const outputPanelRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
@@ -55,32 +71,53 @@ function ResultCard({ backend, result, progress, status }: { backend: BackendKin
   }, [output])
 
   return (
-    <article className={`result-card ${isBuddy ? 'card-buddy' : 'card-llama'}`}>
+    <article className={`result-card card-${backend}`} aria-labelledby={`${backend}-heading`}>
       <div className="result-card-header">
         <div className="engine-heading">
-          <span className={`engine-logo ${isBuddy ? 'logo-buddy' : 'logo-llama'}`} aria-hidden="true">{isBuddy ? 'B' : 'L'}</span>
-          <div><p className="card-kicker">ENGINE {isBuddy ? '01' : '02'}</p><h2>{backendName(backend)}</h2></div>
+          <span className={`engine-logo logo-${backend}`} aria-hidden="true">{isBuddy ? 'B' : 'L'}</span>
+          <div><h3 id={`${backend}-heading`}>{backendName(backend)}</h3><p>ENGINE {isBuddy ? '01' : '02'}</p></div>
         </div>
-        <span className={statusClass(status)}>{statusLabel(status)}</span>
+        <StatusBadge status={status} />
       </div>
-      <div ref={outputPanelRef} className="output-panel" aria-live="polite">
-        {output || notice ? <div className="output-content">{notice && <p className="output-notice" role="status">{notice}</p>}{output && <p className="result-text">{output}</p>}</div> : <div className="empty-state"><span className="state-icon">↗</span><p>{status === 'running' ? '正在生成回答…' : '运行后端或对比，结果会显示在这里'}</p></div>}
+      <div ref={outputPanelRef} className="output-panel" aria-label={`${backendName(backend)} output`} aria-live="polite" tabIndex={0}>
+        {output || notice ? (
+          <div className="output-content">
+            {notice && <p className="output-notice" role="status">{notice}</p>}
+            {output && <p className="result-text">{output}</p>}
+          </div>
+        ) : (
+          <div className="empty-state">
+            <span className={`empty-state-icon ${status === 'running' ? 'is-running' : ''}`}><Icon name={status === 'running' ? 'activity' : 'message'} /></span>
+            <strong>{status === 'running' ? 'Generating a response…' : 'Ready to run'}</strong>
+            <p>{status === 'running' ? 'Generated text will appear here.' : 'Run a model to see its output and performance metrics.'}</p>
+          </div>
+        )}
       </div>
       <dl className="metrics-grid">
-        <Metric label="输入" value={formatNumber(metrics?.promptTokens ?? null, 2)} />
-        <Metric label="输出" value={formatNumber(metrics?.completionTokens ?? null, 2)} />
-        <Metric label="总计" value={formatNumber(metrics?.totalTokens ?? null, 2)} />
-        <Metric label="延迟" value={formatMetric(metrics?.latencyMs ?? null, 'ms', 2)} />
-        <Metric label="首字" value={formatMetric(metrics?.timeToFirstTokenMs ?? progress?.timeToFirstTokenMs ?? null, 'ms', 2)} />
-        <Metric label="速度" value={formatMetric(metrics?.tokensPerSecond ?? null, 't/s', 2)} />
+        <Metric label="Input" value={formatNumber(metrics?.promptTokens ?? null, 2)} />
+        <Metric label="Output" value={formatNumber(metrics?.completionTokens ?? null, 2)} />
+        <Metric label="Total" value={formatNumber(metrics?.totalTokens ?? null, 2)} />
+        <Metric label="Latency" value={formatMetric(metrics?.latencyMs ?? null, 'ms', 2)} />
+        <Metric label="TTFT" value={formatMetric(metrics?.timeToFirstTokenMs ?? progress?.timeToFirstTokenMs ?? null, 'ms', 2)} />
+        <Metric label="Speed" value={formatMetric(metrics?.tokensPerSecond ?? null, 't/s', 2)} />
       </dl>
-      <div className="result-card-footer"><span>finish reason</span><strong>{result?.finishReason ?? '—'}</strong>{metrics?.metricsSource === 'frontend' && <em>速度为前端计算</em>}</div>
+      <div className="result-card-footer">
+        <span>finish reason <strong>{result?.finishReason ?? '—'}</strong></span>
+        <span>{metrics?.metricsSource === 'frontend' ? 'Speed: frontend estimate' : metrics?.metricsSource === 'backend' ? 'Speed: backend reported' : 'Speed: unavailable'}</span>
+      </div>
     </article>
   )
 }
 
 function ProfileSelect({ profiles, value, onChange, disabled }: { profiles: ModelProfile[]; value: string; onChange: (value: string) => void; disabled: boolean }) {
-  return <label className="field profile-field"><span>模型 profile</span><select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>{profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
+  return (
+    <label className="field profile-field">
+      <span>Model profile</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
+        {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
+      </select>
+    </label>
+  )
 }
 
 function App() {
@@ -100,7 +137,7 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.style.colorScheme = theme
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#11171d' : '#f5f7f8')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#131b2c' : '#f5f5f5')
     try {
       window.localStorage.setItem(themeStorageKey, theme)
     } catch {
@@ -120,17 +157,17 @@ function App() {
       : false
   }
   const profileReady = selectedProfile ? modelReadyFor('buddy') && modelReadyFor('llama') : false
-  const availability = (backend: BackendKind): Availability => {
+  const availability = (backend: BackendKind): BackendAvailability => {
     return availabilityFor(backendStatuses[backend], engineStatuses[backend], backendModelId(backend))
   }
 
   const startRun = (mode: BackendKind | 'comparison') => {
     setFormError('')
-    if (!prompt.trim()) { setFormError('请输入 Prompt 后再运行。'); return }
+    if (!prompt.trim()) { setFormError('Enter a prompt before running.'); return }
     if (mode === 'comparison') {
-      if (!selectedProfile || !profileReady) { setFormError('当前 profile 的两个后端模型都不可用，请检查两侧服务的 /v1/models。'); return }
+      if (!selectedProfile || !profileReady) { setFormError('Both inference services must be ready for the selected model. Check the service status.'); return }
     } else if (!selectedProfile || !modelReadyFor(mode)) {
-      setFormError(`${backendName(mode)} 模型不可用，请检查对应服务的 /v1/models。`)
+      setFormError(`${backendName(mode)} model is unavailable. Check the service status.`)
       return
     }
     const params: InferenceRequest = { prompt: prompt.trim(), maxOutputTokens, temperature, seed }
@@ -139,50 +176,101 @@ function App() {
 
   const speedup = runMode === 'comparison' ? speedupForResults(results.buddy, results.llama) : null
   const hasResults = results.buddy !== null || results.llama !== null
-  const summaryText = speedup === null ? '完成两侧推理后，这里会显示速度倍率。' : speedup >= 1 ? `Buddy-MLIR 快 ${formatNumber(speedup, 2)}x` : `llama.cpp 快 ${formatNumber(1 / speedup, 2)}x`
+  const summaryText = speedup === null ? 'Run both engines to compare generation speed.' : `Buddy-MLIR generates at ${formatNumber(speedup, 2)}× the speed of llama.cpp.`
   const modeLabel = runMode === 'comparison' ? 'PARALLEL' : runMode === 'buddy' ? 'BUDDY ONLY' : 'LLAMA ONLY'
-  const nextThemeLabel = theme === 'light' ? '切换到黑夜模式' : '切换到白天模式'
+  const nextThemeLabel = theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'
   const controlsDisabled = runState === 'running'
   const statusChecking = backendStatuses.buddy.healthStatus === 'checking' || backendStatuses.llama.healthStatus === 'checking'
-  const backendErrors = [
+  const backendErrors = Array.from(new Set([
     backendStatuses.buddy.healthError,
     backendStatuses.buddy.modelsError,
     backendStatuses.llama.healthError,
     backendStatuses.llama.modelsError,
-  ].filter(Boolean).join('；')
+  ].filter(Boolean))).join('; ')
   const anyModelsLoaded = backendStatuses.buddy.modelsLoaded || backendStatuses.llama.modelsLoaded
 
   return (
     <div className="app-shell">
-      <header className="topbar"><a className="wordmark" href="/" aria-label="Performance Lab home"><span className="wordmark-mark">⌁</span><span>PERFORMANCE LAB</span></a><div className="topbar-actions"><div className="topbar-meta"><span className="api-url"><span className="meta-label">BUDDY API</span> {ruyiConfig.baseUrl}</span><span className="topbar-divider" aria-hidden="true" /><span className="api-url"><span className="meta-label">LLAMA API</span> {llamaServerConfig.baseUrl}</span><span className="topbar-divider" aria-hidden="true" /><span className="live-dot" /> LOCAL / SINGLE REQUEST</div><button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={nextThemeLabel} aria-pressed={theme === 'dark'} title={nextThemeLabel}><span className="theme-track" aria-hidden="true"><span className="theme-thumb">{theme === 'light' ? '☀' : '☾'}</span></span><span className="theme-label">{theme === 'light' ? '白天' : '黑夜'}</span></button></div></header>
-      <main>
-        <section className="status-strip" aria-label="服务状态"><div className="status-strip-heading"><span className="section-index">01</span><span>RUNTIME STATUS</span></div><div className="status-items"><div className="runtime-status"><span className="runtime-label">BUDDY-MLIR</span><span className={statusClass(availability('buddy'))}>{statusLabel(availability('buddy'))}</span></div><div className="runtime-status"><span className="runtime-label">LLAMA.CPP</span><span className={statusClass(availability('llama'))}>{statusLabel(availability('llama'))}</span></div><button className="text-button" type="button" onClick={() => void refreshStatus()} disabled={statusChecking}><span className="refresh-icon" aria-hidden="true">↻</span> 刷新状态</button></div></section>
-        {backendErrors && <div className="notice-banner" role="alert"><span className="notice-mark">!</span><span>{backendErrors}</span><button type="button" className="notice-action" onClick={() => void refreshStatus()}>重试</button></div>}
-        <section className="benchmark-layout"><aside className="control-panel">
-          <div className="panel-heading"><div><span className="section-index">02</span><span className="panel-label">TEST CONFIGURATION</span></div><span className="config-tag">TEXT / 01</span></div>
-          <div className="fields">
-            <ProfileSelect profiles={modelProfiles} value={selectedProfileId} onChange={setSelectedProfileId} disabled={controlsDisabled} />
-            <div className="profile-ids"><span>{selectedProfile?.buddyModelId ?? '未配置'}</span><span>{backendModelId('llama') || '未配置'}</span></div>
-            <label className="field prompt-field"><span>Prompt</span><textarea id="prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={controlsDisabled} rows={4} placeholder="输入一段要比较的文本…" /><small>{prompt.length.toLocaleString()} / 32,768 chars</small></label>
-            <div className="parameter-grid">
-              <label className="field"><span>Max tokens</span><input id="max-tokens" type="number" min={1} max={4096} value={maxOutputTokens} onChange={(event) => setMaxOutputTokens(Math.max(1, Number(event.target.value) || 1))} disabled={controlsDisabled} /></label>
-              <label className="field"><span>Temperature</span><input id="temperature" type="number" min={0} max={2} step={0.1} value={temperature} onChange={(event) => setTemperature(Math.min(2, Math.max(0, Number(event.target.value) || 0)))} disabled={controlsDisabled} /></label>
-              <label className="field"><span>Seed</span><input id="seed" type="number" value={seed} onChange={(event) => setSeed(Number(event.target.value) || 0)} disabled={controlsDisabled} /></label>
+      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand-group">
+            <a className="brand" href={import.meta.env.BASE_URL} aria-label="RuyiAI Performance Lab home"><img src={logo} alt="RuyiAI" /></a>
+            <span className="brand-divider" />
+            <h1 className="module-name">Performance Lab</h1>
+          </div>
+          <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={nextThemeLabel} aria-pressed={theme === 'dark'} title={nextThemeLabel}>
+            <Icon name={theme === 'light' ? 'moon' : 'sun'} /><span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="main-content" className="main-content">
+        <section className="status-strip" aria-label="Service status">
+          <div className="status-strip-heading"><span className="section-icon"><Icon name="activity" /></span><h2>RUNTIME STATUS</h2></div>
+          <div className="status-items">
+            <div className="runtime-status"><span>Buddy-MLIR</span><StatusBadge status={availability('buddy')} /></div>
+            <div className="runtime-status"><span>llama.cpp</span><StatusBadge status={availability('llama')} /></div>
+          </div>
+          <button className="text-button refresh-button" type="button" onClick={() => void refreshStatus()} disabled={statusChecking}>
+            <Icon name="refresh" className={statusChecking ? 'is-spinning' : ''} />{statusChecking ? 'Checking' : 'Refresh status'}
+          </button>
+        </section>
+        {backendErrors && <div className="notice-banner" role="alert"><Icon name="info" /><span>{backendErrors}</span><button type="button" className="notice-action" onClick={() => void refreshStatus()}>Retry</button></div>}
+
+        <div className="benchmark-layout">
+          <aside className="control-panel" aria-labelledby="configuration-heading">
+            <div className="panel-heading"><span className="section-icon"><Icon name="settings" /></span><div><h2 id="configuration-heading">TEST CONFIGURATION</h2><p>Shared generation settings</p></div></div>
+            <div className="fields">
+              <ProfileSelect profiles={modelProfiles} value={selectedProfileId} onChange={setSelectedProfileId} disabled={controlsDisabled} />
+              <label className="field prompt-field">
+                <span>Prompt</span>
+                <textarea id="prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} disabled={controlsDisabled} rows={5} placeholder="Enter a prompt to compare…" aria-describedby="prompt-count" />
+                <small id="prompt-count">{prompt.length.toLocaleString()} chars</small>
+              </label>
+              <div className="parameter-grid">
+                <label className="field"><span>Max tokens</span><input id="max-tokens" type="number" min={1} max={4096} value={maxOutputTokens} onChange={(event) => setMaxOutputTokens(Math.max(1, Number(event.target.value) || 1))} disabled={controlsDisabled} /></label>
+                <label className="field"><span>Temperature</span><input id="temperature" type="number" min={0} max={2} step={0.1} value={temperature} onChange={(event) => setTemperature(Math.min(2, Math.max(0, Number(event.target.value) || 0)))} disabled={controlsDisabled} /></label>
+                <label className="field"><span>Seed</span><input id="seed" type="number" value={seed} onChange={(event) => setSeed(Number(event.target.value) || 0)} disabled={controlsDisabled} /></label>
+              </div>
+              <label className="stream-toggle">
+                <span className="stream-copy"><span>Streaming output</span><small>Show output as it is generated</small></span>
+                <input type="checkbox" role="switch" checked={streamOutput} onChange={(event) => setStreamOutput(event.target.checked)} disabled={controlsDisabled} aria-label="Streaming output" />
+                <span className="switch-track" aria-hidden="true" />
+              </label>
             </div>
-            <label className="stream-toggle"><input type="checkbox" checked={streamOutput} onChange={(event) => setStreamOutput(event.target.checked)} disabled={controlsDisabled} /><span>Buddy / llama 流式输出</span></label>
-          </div>
-          {formError && <p className="form-error" role="alert">{formError}</p>}
-          <div className="engine-run-actions" aria-label="单独运行后端">
-            <button className="engine-run-button engine-run-buddy" type="button" onClick={() => startRun('buddy')} disabled={controlsDisabled || !modelReadyFor('buddy')}><span>{engineStatuses.buddy === 'running' ? '运行中…' : '运行 Buddy-MLIR'}</span><span className="button-arrow" aria-hidden="true">↗</span></button>
-            <button className="engine-run-button engine-run-llama" type="button" onClick={() => startRun('llama')} disabled={controlsDisabled || !modelReadyFor('llama')}><span>{engineStatuses.llama === 'running' ? '运行中…' : '运行 llama.cpp'}</span><span className="button-arrow" aria-hidden="true">↗</span></button>
-          </div>
-          <button className="run-button" type="button" onClick={() => startRun('comparison')} disabled={controlsDisabled || !profileReady}><span>{runState === 'running' ? '正在运行…' : '运行对比'}</span><span className="button-arrow" aria-hidden="true">↗</span></button>
-          {runState === 'running' && <button className="cancel-button" type="button" onClick={cancel}>取消本次运行</button>}
-          {!profileReady && anyModelsLoaded && <p className="availability-hint">运行对比需要同时注册两个后端模型；也可以使用上方按钮单独运行可用后端。</p>}
-        </aside>
-          <section className="results-section"><div className="results-heading"><div><span className="section-index">03</span><span className="panel-label">LIVE RESULTS</span></div><span className="result-run-state">{runState === 'idle' ? 'READY TO RUN' : statusLabel(runState)}</span></div><div className="results-grid"><ResultCard backend="buddy" result={results.buddy} progress={progress.buddy} status={engineStatuses.buddy} /><ResultCard backend="llama" result={results.llama} progress={progress.llama} status={engineStatuses.llama} /></div><div className={`summary-card ${hasResults ? 'summary-active' : ''}`}><div className="summary-main"><span className="summary-icon" aria-hidden="true">≈</span><div><p className="card-kicker">COMPARISON SUMMARY</p><strong>{summaryText}</strong></div></div><div className="summary-stats"><div><span>Buddy / llama</span><strong>{speedup === null ? '—' : `${formatNumber(speedup, 2)}x`}</strong></div><div><span>模式</span><strong>{modeLabel}</strong></div></div></div><p className="disclaimer">结果来自独立的 ruyi-serving 与 llama-server 请求。不同运行时、采样实现或模型精度可能产生不同文本；速度数据用于性能观察，不代表模型质量结论。</p></section></section>
+            <div className="control-actions">
+              {formError && <p className="form-error" role="alert">{formError}</p>}
+              <button className="run-button" type="button" onClick={() => startRun('comparison')} disabled={controlsDisabled || !profileReady}><Icon name={controlsDisabled ? 'activity' : 'compare'} />{controlsDisabled ? 'Running…' : 'Run comparison'}</button>
+              {controlsDisabled && <button className="cancel-button" type="button" onClick={cancel}><Icon name="stop" />Cancel run</button>}
+              <div className="action-divider"><span>or run one engine</span></div>
+              <div className="engine-run-actions" aria-label="Run an individual engine">
+                <button className="engine-run-button" type="button" onClick={() => startRun('buddy')} disabled={controlsDisabled || !modelReadyFor('buddy')} aria-label="Run Buddy-MLIR"><Icon name="play" />Buddy-MLIR</button>
+                <button className="engine-run-button" type="button" onClick={() => startRun('llama')} disabled={controlsDisabled || !modelReadyFor('llama')} aria-label="Run llama.cpp"><Icon name="play" />llama.cpp</button>
+              </div>
+              {!profileReady && anyModelsLoaded && <p className="availability-hint">Both models must be ready for a comparison. You can also run an available model individually.</p>}
+              <details className="connection-details">
+                <summary>Connection details</summary>
+                <dl><dt>BUDDY API</dt><dd>{ruyiConfig.baseUrl}</dd><dt>Buddy model</dt><dd>{selectedProfile?.buddyModelId ?? 'Not configured'}</dd><dt>LLAMA API</dt><dd>{llamaServerConfig.baseUrl}</dd><dt>llama model</dt><dd>{backendModelId('llama') || 'Not configured'}</dd></dl>
+              </details>
+            </div>
+          </aside>
+
+          <section className="results-section" aria-labelledby="results-heading">
+            <div className="results-heading"><h2 id="results-heading">LIVE RESULTS</h2><span className="result-run-state">{runState === 'idle' ? 'READY TO RUN' : statusLabel(runState)}</span></div>
+            <div className="results-grid">
+              <ResultCard backend="buddy" result={results.buddy} progress={progress.buddy} status={engineStatuses.buddy} />
+              <ResultCard backend="llama" result={results.llama} progress={progress.llama} status={engineStatuses.llama} />
+            </div>
+            <div className={`summary-card ${hasResults ? 'summary-active' : ''}`}>
+              <div className="summary-main"><span className="section-icon"><Icon name="compare" /></span><div><h3>COMPARISON SUMMARY</h3><p>{summaryText}</p></div></div>
+              <div className="summary-stats"><div><span>Buddy / llama</span><strong>{speedup === null ? '—' : `${formatNumber(speedup, 2)}×`}</strong></div><div><span>Mode</span><strong className="mode-label">{modeLabel}</strong></div></div>
+            </div>
+            <p className="disclaimer"><Icon name="info" /><span>Model precision, sampling implementations, and metric sources can affect results. Generation speed is a performance indicator; time to first token may include network and queueing delays.</span></p>
+          </section>
+        </div>
       </main>
-      <footer className="page-footer"><span>MLIR × GGML</span><span>LOCAL INFERENCE / 2026</span></footer>
+      <footer className="page-footer"><span>RuyiAI · Performance Lab</span><span>Buddy-MLIR × llama.cpp</span></footer>
     </div>
   )
 }

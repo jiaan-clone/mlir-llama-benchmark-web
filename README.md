@@ -4,6 +4,10 @@
 
 浏览器通过两条独立链路访问后端：Buddy-MLIR 仍由 `ruyi-serving` 管理；llama.cpp 由独立的 `llama-server` 提供 OpenAI 兼容接口。前端不会执行本地命令。
 
+界面沿用 buddy-caas 的 RuyiAI 标识、深蓝配色与圆角卡片，分为运行配置、双引擎结果和对比摘要。
+默认浅色主题，右上角可切换深色并保存偏好；手机上各区域依次排列。
+界面文案及内置错误提示统一使用英文；服务地址及模型 ID 可在“Connection details”中展开查看。品牌图片与 favicon 复用自 buddy-caas，未重新绘制。
+
 ruyi-serving 的模型准备和 Compute Server 配置见
 [`docs/ruyi-serving-integration.md`](docs/ruyi-serving-integration.md)；llama-server 直连配置和联调见
 [`docs/llama-direct-integration.md`](docs/llama-direct-integration.md)。
@@ -68,7 +72,7 @@ llama-server 使用：
 - `GET /v1/models`：读取 llama 模型
 - `POST /v1/chat/completions`：OpenAI `messages`、`max_tokens`、`temperature`、`seed`，`stream` 由页面流式输出开关控制
 
-单次请求使用相同的 Prompt、max tokens、temperature 和 seed，只替换协议与 model ID。“运行对比”会同时发起两侧请求，也可通过独立按钮仅运行某一个后端。页面上的“Buddy / llama 流式输出”默认关闭；开启后 Buddy 经 ruyi-serving 使用 `POST /v1/responses`、`stream:true`，llama 使用 `POST /v1/chat/completions`、`stream:true`，运行时可看到两侧的增量文本和首个非空文本 delta 的观测时间。要回退，关闭开关并**手动重新运行**；一侧出错不会中止另一侧，取消则会同时中止两侧请求，且不会自动重发推理请求。
+单次请求使用相同的 Prompt、max tokens、temperature 和 seed，只替换协议与 model ID。“Run comparison”会同时发起两侧请求，也可通过独立按钮仅运行某一个后端。页面上的“Streaming output”默认关闭；开启后 Buddy 经 ruyi-serving 使用 `POST /v1/responses`、`stream:true`，llama 使用 `POST /v1/chat/completions`、`stream:true`，运行时可看到两侧的增量文本和首个非空文本 delta 的观测时间。要回退，关闭开关并**手动重新运行**；一侧出错不会中止另一侧，取消则会同时中止两侧请求，且不会自动重发推理请求。
 
 Responses 流使用 `response.output_text.delta` 的顶层 `delta`；`response.completed`、`response.incomplete`、`response.failed` 是终态，也可能收到 `event: error`。它**没有 `[DONE]`**；终态中的 `response.output` 校准最终文本，`response.usage` 和 `response.ruyi.execution_metrics` 提供有效指标。`incomplete` 仍展示为结果，表示输出被 token 上限等原因截断。
 
@@ -88,5 +92,5 @@ npm run build
 - 单页、单用户、单次并发对比。
 - Buddy 与 llama 由同一个页面开关控制是否使用流式输出；缺失用量显示不可用。
 - 不负责模型下载、转换、编译或启动后端进程。
-- tokens/s 取决于各服务是否返回原生 metrics；缺失时页面使用 wall-clock 估算并标记为“前端计算”。
+- tokens/s 取决于各服务是否返回原生 metrics；缺失时页面使用 wall-clock 估算并标记为“Speed: frontend estimate”。
 - API key 会由 Vite 注入前端构建产物，仅适合受信任的本地环境；不应将生产密钥放进公开部署的前端。

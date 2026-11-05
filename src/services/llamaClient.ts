@@ -15,7 +15,7 @@ export function resolveLlamaModelId(profile: Pick<ModelProfile, 'llamaModelId' |
 export function parseLlamaModels(payload: unknown): ModelInfo[] {
   const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : null
   const source = Array.isArray(payload) ? payload : Array.isArray(root?.data) ? root.data : null
-  if (!source) throw new Error('llama-server 模型列表响应格式无法识别。')
+  if (!source) throw new Error('Unrecognized llama-server model list response format.')
   return source.flatMap((item): ModelInfo[] => {
     if (!item || typeof item !== 'object') return []
     const value = item as Record<string, unknown>
@@ -108,13 +108,13 @@ export async function streamLlamaInference(
       consumeEvent(data)
       return done
     })
-    if (!done) throw new Error('llama-server 响应流中断：未收到 [DONE]。')
+    if (!done) throw new Error('llama-server response stream interrupted: missing [DONE].')
     const elapsedMs = performance.now() - startedAt
     const parsed = parseLlamaResponse(modelId, streamResultPayload(text, finishReason, usage, timings))
     return withWallClockFallback(parsed, elapsedMs, firstTokenMs)
   } catch (error) {
     if (stream.didTimeout()) {
-      throw withServiceError(new HttpClientError('请求超时。', 'timeout'), serviceName)
+      throw withServiceError(new HttpClientError('Request timed out.', 'timeout'), serviceName)
     }
     throw withServiceError(error, serviceName)
   } finally {

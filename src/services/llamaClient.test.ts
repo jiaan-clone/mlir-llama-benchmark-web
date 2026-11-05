@@ -54,7 +54,7 @@ describe('llama-server client', () => {
       const pending = client.runInference('alias', {
         prompt: 'hello', maxOutputTokens: 12, temperature: 0, seed: 42,
       }, new AbortController().signal)
-      const expectation = expect(pending).rejects.toThrow('llama-server 请求超时')
+      const expectation = expect(pending).rejects.toThrow('llama-server request timed out')
       await vi.advanceTimersByTimeAsync(120000)
       expect(requestSignal?.aborted).toBe(false)
       await vi.advanceTimersByTimeAsync(1680000)
@@ -137,7 +137,7 @@ describe('llama-server client', () => {
       }, new AbortController().signal, undefined, {
         baseUrl: 'http://llama.test', apiKey: '', inferenceTimeoutMs: 1800000,
       })
-      const expectation = expect(pending).rejects.toThrow('llama-server 请求超时')
+      const expectation = expect(pending).rejects.toThrow('llama-server request timed out')
       await vi.advanceTimersByTimeAsync(120000)
       expect(cancelled).toBe(false)
       await vi.advanceTimersByTimeAsync(1680000)
