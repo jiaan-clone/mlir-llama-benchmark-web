@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpClientError, requestJson, requestStream } from './httpClient'
+import { HttpClientError, onAuthenticationRequired, requestJson, requestStream } from './httpClient'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -54,6 +54,7 @@ describe('requestJson', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://example.test/health')
     expect(headers.get('Authorization')).toBe('Bearer secret')
     expect(headers.get('X-Test')).toBe('yes')
+    expect(request.credentials).toBe('same-origin')
   })
 
   it('returns null for an empty successful response', async () => {
@@ -92,5 +93,17 @@ describe('requestJson', () => {
     const error = await requestJson({ baseUrl: 'http://example.test', path: '/health' }).catch((value: unknown) => value)
     expect(error).toBeInstanceOf(HttpClientError)
     expect((error as HttpClientError).kind).toBe('network')
+  })
+
+  it('notifies the platform UI when the gateway session has expired', async () => {
+    const listener = vi.fn()
+    const unsubscribe = onAuthenticationRequired(listener)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{"message":"Login required"}', {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    await expect(requestJson({ baseUrl: '/api/benchmark/buddy', path: '/health' })).rejects.toMatchObject({ status: 401 })
+    expect(listener).toHaveBeenCalledTimes(1)
+    unsubscribe()
   })
 })

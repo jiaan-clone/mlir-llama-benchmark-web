@@ -8,12 +8,15 @@ import { resolveLlamaModelId } from './services/llamaClient'
 import { useBackendStatus } from './hooks/useBackendStatus'
 import { useInferenceRunner } from './hooks/useInferenceRunner'
 import { formatMetric, formatNumber, speedupForResults } from './metrics'
+import { onAuthenticationRequired } from './services/httpClient'
+import { platformLoginHref, platformReturnTo } from './platformConfig'
 import type { EngineStatus } from './services/inferenceRunner'
 import type { BackendAvailability, BackendKind, EngineResult, EngineStreamUpdate, InferenceRequest, ModelProfile } from './types'
 
 type Theme = 'light' | 'dark'
 type IconName = 'activity' | 'settings' | 'play' | 'stop' | 'refresh' | 'sun' | 'moon' | 'message' | 'compare' | 'info'
 const themeStorageKey = 'performance-lab-theme'
+const platformMode = import.meta.env.MODE === 'platform'
 
 function Icon({ name, className = '' }: { name: IconName; className?: string }) {
   const paths = {
@@ -133,6 +136,7 @@ function App() {
   const { statuses: backendStatuses, refreshStatus } = useBackendStatus(backendClients)
   const { engineStatuses, results, progress, runState, runMode, run, cancel } = useInferenceRunner(backendClients)
   const [formError, setFormError] = useState('')
+  const [authenticationRequired, setAuthenticationRequired] = useState(false)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -144,6 +148,11 @@ function App() {
       // The selected theme still applies for the current page session.
     }
   }, [theme])
+
+  useEffect(() => {
+    if (!platformMode) return
+    return onAuthenticationRequired(() => setAuthenticationRequired(true))
+  }, [])
 
   const backendModelId = (backend: BackendKind) => selectedProfile
     ? backend === 'buddy'
@@ -188,6 +197,7 @@ function App() {
     backendStatuses.llama.modelsError,
   ].filter(Boolean))).join('; ')
   const anyModelsLoaded = backendStatuses.buddy.modelsLoaded || backendStatuses.llama.modelsLoaded
+  const loginHref = platformLoginHref(platformReturnTo(window.location))
 
   return (
     <div className="app-shell">
@@ -199,9 +209,12 @@ function App() {
             <span className="brand-divider" />
             <h1 className="module-name">Performance Lab</h1>
           </div>
-          <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={nextThemeLabel} aria-pressed={theme === 'dark'} title={nextThemeLabel}>
-            <Icon name={theme === 'light' ? 'moon' : 'sun'} /><span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
-          </button>
+          <div className="topbar-actions">
+            {platformMode && <a className="platform-link" href="/">Back to platform</a>}
+            <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={nextThemeLabel} aria-pressed={theme === 'dark'} title={nextThemeLabel}>
+              <Icon name={theme === 'light' ? 'moon' : 'sun'} /><span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -216,6 +229,7 @@ function App() {
             <Icon name="refresh" className={statusChecking ? 'is-spinning' : ''} />{statusChecking ? 'Checking' : 'Refresh status'}
           </button>
         </section>
+        {authenticationRequired && <div className="notice-banner session-notice" role="alert"><Icon name="info" /><span>Your platform session has expired. Sign in again before starting another run.</span><a className="notice-action" href={loginHref}>Sign in again</a></div>}
         {backendErrors && <div className="notice-banner" role="alert"><Icon name="info" /><span>{backendErrors}</span><button type="button" className="notice-action" onClick={() => void refreshStatus()}>Retry</button></div>}
 
         <div className="benchmark-layout">

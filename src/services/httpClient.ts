@@ -27,6 +27,20 @@ export interface HttpStreamResponse {
   didTimeout: () => boolean
 }
 
+type AuthenticationRequiredListener = () => void
+const authenticationRequiredListeners = new Set<AuthenticationRequiredListener>()
+
+export function onAuthenticationRequired(listener: AuthenticationRequiredListener): () => void {
+  authenticationRequiredListeners.add(listener)
+  return () => {
+    authenticationRequiredListeners.delete(listener)
+  }
+}
+
+function notifyAuthenticationRequired(): void {
+  for (const listener of authenticationRequiredListeners) listener()
+}
+
 export function isAbortError(error: unknown): error is DOMException {
   return error instanceof DOMException && error.name === 'AbortError'
 }
@@ -93,6 +107,7 @@ export async function requestJson<T = unknown>({
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
       ...init,
+      credentials: init.credentials ?? 'same-origin',
       signal: controller.signal,
       headers,
     })
@@ -114,6 +129,7 @@ export async function requestJson<T = unknown>({
 
   const payload = parsePayload(await response.text())
   if (!response.ok) {
+    if (response.status === 401) notifyAuthenticationRequired()
     throw new HttpClientError(extractErrorMessage(payload, response.status), 'http', response.status)
   }
   return payload as T | null
@@ -157,6 +173,7 @@ export async function requestStream({
   try {
     response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
       ...init,
+      credentials: init.credentials ?? 'same-origin',
       signal: controller.signal,
       headers,
     })
@@ -171,6 +188,7 @@ export async function requestStream({
   if (!response.ok) {
     try {
       const payload = parsePayload(await response.text())
+      if (response.status === 401) notifyAuthenticationRequired()
       throw new HttpClientError(extractErrorMessage(payload, response.status), 'http', response.status)
     } catch (error) {
       if (error instanceof HttpClientError) throw error

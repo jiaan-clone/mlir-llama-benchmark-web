@@ -29,6 +29,17 @@ npm run build
 npm run preview
 ```
 
+接入 buddy-caas 时使用经过校验的平台构建：
+
+```bash
+npm run build:platform
+```
+
+该模式固定资源基路径为 `/benchmark/`，并要求两侧 API 分别为
+`/api/benchmark/buddy` 和 `/api/benchmark/llama`。构建检测到前端 API key、
+浏览器本机地址或其他 API 路径时会直接失败；本地独立开发仍使用普通
+`npm run dev` 和 `.env`。
+
 ## 配置
 
 `.env` 支持：
